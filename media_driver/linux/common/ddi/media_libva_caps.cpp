@@ -580,6 +580,10 @@ VAStatus MediaLibvaCaps::CreateEncAttributes(
             GetPlatformSpecificAttrib(profile, entrypoint,
                     VAConfigAttribEncMaxRefFrames, &attrib.value);
         }
+        if(IsVp9Profile(profile))
+        {
+            attrib.value = CODEC_VP9_NUM_REF_FRAMES;
+        }
     }
     (*attribList)[attrib.type] = attrib.value;
 
@@ -1445,6 +1449,23 @@ VAStatus MediaLibvaCaps::LoadVp9DecProfileEntrypoints()
 VAStatus MediaLibvaCaps::LoadVp9EncProfileEntrypoints()
 {
     VAStatus status = VA_STATUS_SUCCESS;
+
+#ifdef _VP9_ENCODE_VME_SUPPORTED
+    AttribMap *attributeList;
+    if (MEDIA_IS_SKU(&(m_mediaCtx->SkuTable), FtrEncodeVP9))
+    {
+        status = CreateEncAttributes(VAProfileVP9Profile0, VAEntrypointEncSlice, &attributeList);
+        DDI_CHK_RET(status, "Failed to initialize Caps!");
+
+        uint32_t configStartIdx = m_encConfigs.size();
+        for (int32_t j = 0; j < 3; j++)
+        {
+            AddEncConfig(m_encRcMode[j]);
+        }
+        AddProfileEntry(VAProfileVP9Profile0, VAEntrypointEncSlice, attributeList,
+                configStartIdx, m_encConfigs.size() - configStartIdx);
+    }
+#endif
 
     return status;
 }
