@@ -1039,6 +1039,13 @@ VAStatus DdiEncodeVp9::ReportExtraStatus(
 
     codedBufferSegment->next = codedBufStatus;
 
+    //Hack
+    //VAEncCodedBufferSegment with multiple types of buffers is unhandled
+    //in many of the software projects. So this is a temporary workaround to
+    //make the customers happy. Actull freeing will happen later during
+    //DdiEncodeVp9 destruction.
+    codedBufferSegment->next = NULL;
+
     return vaStatus;
 }
 
