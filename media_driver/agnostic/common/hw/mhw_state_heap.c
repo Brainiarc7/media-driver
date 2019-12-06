@@ -90,6 +90,7 @@ extern const MHW_SURFACE_STATE_PARAMS g_cInit_MhwSurfaceStateParams =
     0,        // dwXOffsetForV
     0,        // dwYOffsetForV
     0,        // Compression Format
+    0,        // L1CacheConfig
 
     nullptr,     // [out] pdwCmd
     0         // [out] dwLocationInCmd
@@ -1486,7 +1487,8 @@ MOS_STATUS XMHW_STATE_HEAP_INTERFACE::ExtendStateHeapDyn(
         m_pOsInterface,
         &AllocParams,
         &pNewStateHeap->resHeap));
-
+    MHW_CHK_STATUS(m_pOsInterface->pfnRegisterResource(m_pOsInterface, &pNewStateHeap->resHeap,
+                                                       true, true));
     if (StateHeapType == MHW_ISH_TYPE)
     {
         if (m_StateHeapSettings.m_keepIshLocked)

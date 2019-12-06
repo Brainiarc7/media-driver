@@ -47,6 +47,8 @@ DdiEncodeHevc::~DdiEncodeHevc()
     MOS_FreeMemory(m_encodeCtx->pSeqParams);
     m_encodeCtx->pSeqParams = nullptr;
 
+    MOS_FreeMemory(((PCODEC_HEVC_ENCODE_PICTURE_PARAMS)m_encodeCtx->pPicParams)->pDirtyRect);
+    ((PCODEC_HEVC_ENCODE_PICTURE_PARAMS)m_encodeCtx->pPicParams)->pDirtyRect = nullptr;
     MOS_FreeMemory(m_encodeCtx->pPicParams);
     m_encodeCtx->pPicParams = nullptr;
 
@@ -95,8 +97,8 @@ VAStatus DdiEncodeHevc::ContextInitialize(
     if (true == m_encodeCtx->bVdencActive)
     {
         codecHalSettings->codecFunction = CODECHAL_FUNCTION_ENC_VDENC_PAK;
-        codecHalSettings->disableUltraHME = true;
-        codecHalSettings->disableSuperHME = true;
+        codecHalSettings->disableUltraHME = false;
+        codecHalSettings->disableSuperHME = false;
     }
     else
     {
@@ -469,6 +471,8 @@ VAStatus DdiEncodeHevc::ParseSeqParams(void *ptr)
     hevcSeqParams->SAO_enabled_flag                   = seqParams->seq_fields.bits.sample_adaptive_offset_enabled_flag;
     hevcSeqParams->pcm_enabled_flag                   = seqParams->seq_fields.bits.pcm_enabled_flag;
     hevcSeqParams->pcm_loop_filter_disable_flag       = seqParams->seq_fields.bits.pcm_loop_filter_disabled_flag;
+    hevcSeqParams->LowDelayMode                       = seqParams->seq_fields.bits.low_delay_seq;
+    hevcSeqParams->HierarchicalFlag                   = seqParams->seq_fields.bits.hierachical_flag;
 
     hevcSeqParams->log2_max_coding_block_size_minus3 = seqParams->log2_diff_max_min_luma_coding_block_size +
                                                        seqParams->log2_min_luma_coding_block_size_minus3;
@@ -554,6 +558,8 @@ VAStatus DdiEncodeHevc::ParsePicParams(
     /* picParams->coding_type; App is always setting this to 0 */
     hevcPicParams->CodingType = picParams->pic_fields.bits.coding_type;
 
+    hevcPicParams->HierarchLevelPlus1 = picParams->hierarchical_level_plus1;
+
     /* Reset it to zero now */
     hevcPicParams->NumSlices = 0;
 
@@ -585,6 +591,10 @@ VAStatus DdiEncodeHevc::ParsePicParams(
     hevcPicParams->slice_pic_parameter_set_id       = picParams->slice_pic_parameter_set_id;
     hevcPicParams->nal_unit_type                    = picParams->nal_unit_type;
     hevcPicParams->no_output_of_prior_pics_flag     = picParams->pic_fields.bits.no_output_of_prior_pics_flag;
+    hevcPicParams->bDisplayFormatSwizzle            = NeedDisapayFormatSwizzle(rtTbl->pCurrentRT, rtTbl->pCurrentReconTarget);
+
+    // Correct Input color space of Sequence parameter here
+    hevcSeqParams->InputColorSpace                  = hevcPicParams->bDisplayFormatSwizzle ? ECOLORSPACE_P601 : ECOLORSPACE_P709;
 
     if (hevcPicParams->tiles_enabled_flag)
     {
@@ -1058,8 +1068,16 @@ VAStatus DdiEncodeHevc::ParseMiscParams(void *ptr)
         //enable parallelBRC for Android and Linux
         seqParams->ParallelBRC = vaEncMiscParamRC->rc_flags.bits.enable_parallel_brc;
 
-        picParams->BRCMaxQp  = (vaEncMiscParamRC->max_qp == 0) ? 51 : (uint8_t)CodecHal_Clip3(1, 51, (int8_t)vaEncMiscParamRC->max_qp);
-        picParams->BRCMinQp = (vaEncMiscParamRC->min_qp == 0) ? 1 : (uint8_t)CodecHal_Clip3(1, picParams->BRCMaxQp, (int8_t)vaEncMiscParamRC->min_qp);
+        if (true == m_encodeCtx->bVdencActive)
+        {
+            picParams->BRCMaxQp  = (vaEncMiscParamRC->max_qp == 0) ? 51 : (uint8_t)CodecHal_Clip3(1, 51, (int8_t)vaEncMiscParamRC->max_qp);
+            picParams->BRCMinQp = (vaEncMiscParamRC->min_qp == 0) ? 1 : (uint8_t)CodecHal_Clip3(1, picParams->BRCMaxQp, (int8_t)vaEncMiscParamRC->min_qp);
+        }
+        else
+        {
+            picParams->BRCMaxQp  = (uint8_t)CodecHal_Clip3(0, 51, (int8_t)vaEncMiscParamRC->max_qp); //use 0 to ignore
+            picParams->BRCMinQp = (uint8_t)CodecHal_Clip3(0, picParams->BRCMaxQp, (int8_t)vaEncMiscParamRC->min_qp); //use 0 to ignore
+        }
 
         if (VA_RC_NONE == m_encodeCtx->uiRCMethod || VA_RC_CQP == m_encodeCtx->uiRCMethod)
         {
@@ -1090,8 +1108,7 @@ VAStatus DdiEncodeHevc::ParseMiscParams(void *ptr)
         else if (VA_RC_QVBR & m_encodeCtx->uiRCMethod)
         {
             seqParams->RateControlMethod = RATECONTROL_QVBR;
-            seqParams->ICQQualityFactor = vaEncMiscParamRC->ICQ_quality_factor;
-            seqParams->MBBRC = 1;
+            seqParams->ICQQualityFactor = vaEncMiscParamRC->quality_factor;
         }
         else
         {
@@ -1230,6 +1247,71 @@ VAStatus DdiEncodeHevc::ParseMiscParams(void *ptr)
             return VA_STATUS_ERROR_INVALID_PARAMETER;
         }
 #endif
+        break;
+    }
+    case VAEncMiscParameterTypeDirtyRect:
+    {
+        VAEncMiscParameterBufferDirtyRect *vaEncMiscDirtyRect = (VAEncMiscParameterBufferDirtyRect *)miscParamBuf->data;
+
+        uint8_t blockSize  = (m_encodeCtx->bVdencActive) ? vdencRoiBlockSize : CODECHAL_MACROBLOCK_WIDTH;
+        uint32_t frameWidth = (seqParams->wFrameWidthInMinCbMinus1 + 1) << (seqParams->log2_min_coding_block_size_minus3 + 3);
+        uint32_t frameHeight = (seqParams->wFrameHeightInMinCbMinus1 + 1) << (seqParams->log2_min_coding_block_size_minus3 + 3);
+
+         DDI_CHK_NULL(vaEncMiscDirtyRect->roi_rectangle, "nullptr dirty rect", VA_STATUS_ERROR_INVALID_PARAMETER);
+        if(vaEncMiscDirtyRect->num_roi_rectangle > ENCODE_VDENC_HEVC_MAX_DIRTYRECT_G10)
+        {
+            DDI_ASSERTMESSAGE("The number of dirty rect is greater than %d", ENCODE_VDENC_HEVC_MAX_DIRTYRECT_G10);
+            return VA_STATUS_ERROR_INVALID_PARAMETER;
+        }
+        picParams->pDirtyRect = m_pDirtyRect;
+
+        if (vaEncMiscDirtyRect->num_roi_rectangle > m_numDirtyRects)
+        {
+            picParams->pDirtyRect = (PCODEC_ROI)MOS_ReallocMemory(picParams->pDirtyRect, vaEncMiscDirtyRect->num_roi_rectangle * sizeof(CODEC_ROI));
+            if (!picParams->pDirtyRect)
+            {
+                picParams->NumDirtyRects = 0;
+                DDI_ASSERTMESSAGE("Allocation of pDirtyRect failed!");
+                return VA_STATUS_ERROR_ALLOCATION_FAILED;
+            }
+            m_pDirtyRect = picParams->pDirtyRect;
+            m_numDirtyRects = vaEncMiscDirtyRect->num_roi_rectangle;
+        }
+
+        if(vaEncMiscDirtyRect->num_roi_rectangle > 0)
+        {
+            MOS_ZeroMemory(picParams->pDirtyRect, vaEncMiscDirtyRect->num_roi_rectangle * sizeof(CODEC_ROI));
+            picParams->NumDirtyRects = 0;
+
+            for (int32_t i = 0; i < vaEncMiscDirtyRect->num_roi_rectangle; i++)
+            {
+                auto &rect    = picParams->pDirtyRect[i];
+                auto &va_rect = vaEncMiscDirtyRect->roi_rectangle[i];
+
+                // Check and adjust if rect not within frame boundaries
+                rect.Left   = MOS_MIN(va_rect.x, frameWidth - 1);
+                rect.Top    = MOS_MIN(va_rect.y, frameHeight - 1);
+                rect.Right  = MOS_MIN(va_rect.x + va_rect.width, frameWidth - 1);
+                rect.Bottom = MOS_MIN(va_rect.y + va_rect.height, frameHeight - 1);
+
+                if( rect.Left > rect.Right ||  rect.Top > rect.Bottom)
+                {
+                    DDI_ASSERTMESSAGE("Invalid rect region parameter.");
+                    return VA_STATUS_ERROR_INVALID_PARAMETER;
+                }
+
+                rect.Right  = MOS_ALIGN_CEIL(rect.Right, blockSize);
+                rect.Bottom = MOS_ALIGN_CEIL(rect.Bottom, blockSize);
+
+                // Convert from pixel units to block units
+                rect.Left /= blockSize;
+                rect.Right /= blockSize;
+                rect.Top /= blockSize;
+                rect.Bottom /= blockSize;
+
+                picParams->NumDirtyRects ++;
+            }
+        }
         break;
     }
     case VAEncMiscParameterTypeSkipFrame:

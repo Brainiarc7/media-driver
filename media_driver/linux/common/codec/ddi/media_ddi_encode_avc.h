@@ -29,6 +29,58 @@
 
 #include "media_ddi_encode_base.h"
 
+class AvcInBits
+{
+public:
+    AvcInBits(uint8_t *pInBits, uint32_t BitSize);
+
+    virtual ~AvcInBits() {};
+
+    void SkipBits(uint32_t n);
+
+    uint32_t GetBit();
+
+    uint32_t GetBits(uint32_t n);
+
+    uint32_t GetUE();
+
+    uint32_t GetBitOffset();
+
+    void ResetBitOffset();
+
+protected:
+    uint8_t const *m_pInBits;
+    uint32_t m_BitSize;
+    uint32_t m_BitOffset;
+
+private:
+    AvcInBits() {};
+};
+
+class AvcOutBits
+{
+public:
+    AvcOutBits(uint8_t *pOutBits, uint32_t BitSize);
+
+    virtual ~AvcOutBits() {};
+
+    void PutBit(uint32_t v);
+
+    void PutBits(uint32_t v, uint32_t n);
+
+    uint32_t GetBitOffset();
+
+protected:
+    uint8_t *m_pOutBits;
+    uint8_t *m_pOutBitsEnd;
+    uint32_t m_BitSize;
+    uint32_t m_ByteSize;
+    uint32_t m_BitOffset;
+
+private:
+    AvcOutBits() {};
+};
+
 //!
 //! \class  DdiEncodeAvc
 //! \brief  Ddi encode AVC
@@ -46,13 +98,13 @@ public:
     //!
     virtual ~DdiEncodeAvc();
 
-    virtual VAStatus ContextInitialize(CodechalSetting * codecHalSettings);
+    virtual VAStatus ContextInitialize(CodechalSetting * codecHalSettings) override;
 
     virtual VAStatus RenderPicture(
         VADriverContextP ctx,
         VAContextID      context,
         VABufferID       *buffers,
-        int32_t          numBuffers);
+        int32_t          numBuffers) override;
 
     //!
     //! \brief    Parse Qp matrix
@@ -172,15 +224,21 @@ protected:
 
     uint32_t getQMatrixBufferSize() override;
 
-    virtual VAStatus EncodeInCodecHal(uint32_t numSlices);
+    virtual VAStatus EncodeInCodecHal(uint32_t numSlices) override;
 
-    virtual VAStatus ResetAtFrameLevel();
+    virtual VAStatus ResetAtFrameLevel() override;
 
     virtual VAStatus ParsePicParams(
         DDI_MEDIA_CONTEXT *mediaCtx,
-        void              *ptr);
+        void              *ptr) override;
 
     virtual void ClearPicParams() override;
+
+    virtual MOS_STATUS CheckPackedSlcHeaderData(
+        void *pInSlcHdr,
+        uint32_t InBitSize,
+        void **ppOutSlcHdr,
+        uint32_t &OutBitSize);
 
     //!
     //! \brief    Convert slice struct from VA to codechal

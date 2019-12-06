@@ -167,10 +167,10 @@ bool VphalSfcState::IsOutputCapable(
     bool isOutputCapable = false;
 
     VPHAL_RENDER_NORMALMESSAGE(
-        "isColorFill %d,                                                                       \
-         src->rcDst.top %d,                                                                    \
-         src->rcDst.left %d,                                                                   \
-         renderTarget->TileType %d,                                                            \
+        "isColorFill %d, \
+         src->rcDst.top %d, \
+         src->rcDst.left %d, \
+         renderTarget->TileType %d, \
          renderTarget->Format %d",
         isColorFill,
         src->rcDst.top,
@@ -247,15 +247,15 @@ bool VphalSfcState::IsOutputPipeSfcFeasible(
     PVPHAL_SURFACE              pRenderTarget)
 {
     VPHAL_RENDER_NORMALMESSAGE(
-        "IsDisabled %d,                                                                      \
-         uDstCount %d,                                                                       \
-         Rotation %d,                                                                        \
-         pTarget[0]->TileType %d,                                                            \
-         IsFormatSupported %d,                                                               \
-         InputFormat %d,                                                                     \
-         OutputFormat %d,                                                                    \
-         pCompAlpha %p,                                                                      \
-         pDeinterlaceParams %p,                                                              \
+        "IsDisabled %d, \
+         uDstCount %d, \
+         Rotation %d, \
+         pTarget[0]->TileType %d, \
+         IsFormatSupported %d, \
+         InputFormat %d, \
+         OutputFormat %d, \
+         pCompAlpha %p, \
+         pDeinterlaceParams %p, \
          bQueryVariance %d",
         IsDisabled(),
         pcRenderParams->uDstCount,
@@ -287,6 +287,12 @@ bool VphalSfcState::IsOutputPipeSfcFeasible(
          (pSrcSurface->Format != Format_A8R8G8B8 && pSrcSurface->Format != Format_A8B8G8R8))    &&
         pSrcSurface->bQueryVariance             == false)
     {
+        // For platforms with VEBOX disabled but procamp enabled, go Render path
+        if (MEDIA_IS_SKU(m_renderHal->pSkuTable, FtrDisableVEBoxFeatures) && pSrcSurface->pProcampParams != nullptr)
+        {
+            return false;
+        }
+
         return true;
     }
 
@@ -727,8 +733,7 @@ bool VphalSfcState::IsFormatSupported(
     // Check if the input/output combination is supported, given certain alpha fill mode.
     // So far SFC only supports filling constant alpha.
     if (pAlphaParams &&
-        (pAlphaParams->AlphaMode == VPHAL_ALPHA_FILL_MODE_NONE ||
-         pAlphaParams->AlphaMode == VPHAL_ALPHA_FILL_MODE_SOURCE_STREAM))
+        pAlphaParams->AlphaMode == VPHAL_ALPHA_FILL_MODE_SOURCE_STREAM)
     {
         if ((pOutSurface->Format == Format_A8R8G8B8    ||
              pOutSurface->Format == Format_A8B8G8R8    ||

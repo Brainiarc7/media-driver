@@ -811,17 +811,9 @@ MOS_STATUS CodechalEncodeHevcBase::SetSequenceStructs()
 
     uint32_t frameHeight = (m_hevcSeqParams->wFrameHeightInMinCbMinus1 + 1) << (m_hevcSeqParams->log2_min_coding_block_size_minus3 + 3);
 
-    if (m_firstFrame)
-    {
-        m_oriFrameWidth   = frameWidth;
-        m_oriFrameHeight  = frameHeight;
-        m_prevFrameWidth  = m_oriFrameWidth;       //to ensure resolution reset at frame 0 is captured
-        m_prevFrameHeight = m_oriFrameHeight;
-    }
-
     // check if there is a dynamic resolution change
-    if ((m_prevFrameHeight && (m_prevFrameHeight != frameHeight)) ||
-        (m_prevFrameWidth && (m_prevFrameWidth != frameWidth)))
+    if ((m_oriFrameHeight && (m_oriFrameHeight != frameHeight)) ||
+        (m_oriFrameWidth && (m_oriFrameWidth != frameWidth)))
     {
         if (frameHeight > m_createHeight || frameWidth > m_createWidth)
         {
@@ -838,8 +830,8 @@ MOS_STATUS CodechalEncodeHevcBase::SetSequenceStructs()
     }
 
     // setup internal parameters
-    m_prevFrameWidth = m_oriFrameWidth = m_frameWidth = frameWidth;
-    m_prevFrameHeight = m_oriFrameHeight = m_frameHeight = frameHeight;
+    m_oriFrameWidth = m_frameWidth = frameWidth;
+    m_oriFrameHeight = m_frameHeight = frameHeight;
 
     m_picWidthInMb = (uint16_t)CODECHAL_GET_WIDTH_IN_MACROBLOCKS(m_oriFrameWidth);
     m_picHeightInMb = (uint16_t)CODECHAL_GET_HEIGHT_IN_MACROBLOCKS(m_oriFrameHeight);
@@ -942,6 +934,11 @@ MOS_STATUS CodechalEncodeHevcBase::SetSequenceStructs()
 
     m_encode4KSequence = ((m_frameWidth * m_frameHeight) >=
                              (ENCODE_HEVC_4K_PIC_WIDTH * ENCODE_HEVC_4K_PIC_HEIGHT))
+                             ? true
+                             : false;
+
+    m_encode16KSequence = ((m_frameWidth * m_frameHeight) >=
+                              (ENCODE_HEVC_16K_PIC_WIDTH * ENCODE_HEVC_16K_PIC_HEIGHT))
                              ? true
                              : false;
 
@@ -1654,7 +1651,8 @@ MOS_STATUS CodechalEncodeHevcBase::SubmitCommandBuffer(
 
 MOS_STATUS CodechalEncodeHevcBase::SendPrologWithFrameTracking(
     PMOS_COMMAND_BUFFER         cmdBuffer,
-    bool                        frameTrackingRequested)
+    bool                        frameTrackingRequested,
+    MHW_MI_MMIOREGISTERS       *mmioRegister)
 {
     MOS_STATUS eStatus = MOS_STATUS_SUCCESS;
 
@@ -1662,7 +1660,7 @@ MOS_STATUS CodechalEncodeHevcBase::SendPrologWithFrameTracking(
 
     CODECHAL_ENCODE_CHK_NULL_RETURN(cmdBuffer);
 
-    CODECHAL_ENCODE_CHK_STATUS_RETURN(CodechalEncoderState::SendPrologWithFrameTracking(cmdBuffer, frameTrackingRequested));
+    CODECHAL_ENCODE_CHK_STATUS_RETURN(CodechalEncoderState::SendPrologWithFrameTracking(cmdBuffer, frameTrackingRequested, mmioRegister));
 
     return eStatus;
 }
@@ -3289,6 +3287,17 @@ MOS_STATUS CodechalEncodeHevcBase::DumpSeqParams(
     oss << "SourceBitDepth = " << +seqParams->SourceBitDepth << std::endl;
     oss << "QpAdjustment = " << +seqParams->QpAdjustment << std::endl;
     oss << "ROIValueInDeltaQP = " << +seqParams->ROIValueInDeltaQP << std::endl;
+    oss << "BlockQPforNonRectROI = " << +seqParams->BlockQPforNonRectROI << std::endl;
+    oss << "EnableTileBasedEncode = " << +seqParams->EnableTileBasedEncode << std::endl;
+    oss << "bAutoMaxPBFrameSizeForSceneChange = " << +seqParams->bAutoMaxPBFrameSizeForSceneChange << std::endl;
+    oss << "EnableStreamingBufferLLC = " << +seqParams->EnableStreamingBufferLLC << std::endl;
+    oss << "EnableStreamingBufferDDR  = " << +seqParams->EnableStreamingBufferDDR << std::endl;
+    oss << "LowDelayMode = " << +seqParams->LowDelayMode << std::endl;
+    oss << "DisableHRDConformance = " << +seqParams->DisableHRDConformance << std::endl;
+    oss << "HierarchicalFlag = " << +seqParams->HierarchicalFlag << std::endl;
+    oss << "UserMaxIFrameSize = " << +seqParams->UserMaxIFrameSize << std::endl;
+    oss << "UserMaxPBFrameSize = " << +seqParams->UserMaxPBFrameSize << std::endl;
+    oss << "ICQQualityFactor = " << +seqParams->ICQQualityFactor << std::endl;
     oss << "NumB = " << +seqParams->NumOfBInGop[0] << std::endl;
     oss << "NumB1 = " << +seqParams->NumOfBInGop[1] << std::endl;
     oss << "NumB2 = " << +seqParams->NumOfBInGop[2] << std::endl;
@@ -3304,6 +3313,11 @@ MOS_STATUS CodechalEncodeHevcBase::DumpSeqParams(
     oss << "pcm_loop_filter_disable_flag = " << +seqParams->pcm_loop_filter_disable_flag << std::endl;
     oss << "chroma_format_idc = " << +seqParams->chroma_format_idc << std::endl;
     oss << "separate_colour_plane_flag = " << +seqParams->separate_colour_plane_flag << std::endl;
+    oss << "palette_mode_enabled_flag = " << +seqParams->palette_mode_enabled_flag << std::endl;
+    oss << "RGBEncodingEnable = " << +seqParams->RGBEncodingEnable << std::endl;
+    oss << "PrimaryChannelForRGBEncoding = " << +seqParams->PrimaryChannelForRGBEncoding << std::endl;
+    oss << "SecondaryChannelForRGBEncoding = " << +seqParams->SecondaryChannelForRGBEncoding << std::endl;
+
     oss << "log2_max_coding_block_size_minus3 = " << +seqParams->log2_max_coding_block_size_minus3 << std::endl;
     oss << "log2_min_coding_block_size_minus3 = " << +seqParams->log2_min_coding_block_size_minus3 << std::endl;
     oss << "log2_max_transform_block_size_minus2 = " << +seqParams->log2_max_transform_block_size_minus2 << std::endl;
@@ -3375,6 +3389,7 @@ MOS_STATUS CodechalEncodeHevcBase::DumpPicParams(
     }
 
     oss << "CodingType = " << +picParams->CodingType << std::endl;
+    oss << "HierarchLevelPlus1 = " << +picParams->HierarchLevelPlus1 << std::endl; 
     oss << "NumSlices = " << +picParams->NumSlices << std::endl;
     oss << "tiles_enabled_flag = " << +picParams->tiles_enabled_flag << std::endl;
 

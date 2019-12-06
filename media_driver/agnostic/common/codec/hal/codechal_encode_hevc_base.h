@@ -71,6 +71,9 @@
 #define ENCODE_HEVC_8K_PIC_WIDTH     7680
 #define ENCODE_HEVC_8K_PIC_HEIGHT    4320
 
+#define ENCODE_HEVC_16K_PIC_WIDTH    16384
+#define ENCODE_HEVC_16K_PIC_HEIGHT   4096
+
 // Max supported resolution for HEVC encode is 4K X 2K
 #define ENCODE_HEVC_MAX_4K_PIC_WIDTH     4096
 #define ENCODE_HEVC_MAX_4K_PIC_HEIGHT    2176
@@ -1192,7 +1195,9 @@ enum HEVC_BRC_FRAME_TYPE
     HEVC_BRC_FRAME_TYPE_B = 1,
     HEVC_BRC_FRAME_TYPE_I = 2,
     HEVC_BRC_FRAME_TYPE_B1 = 3,
-    HEVC_BRC_FRAME_TYPE_B2 = 4
+    HEVC_BRC_FRAME_TYPE_B2 = 4,
+    HEVC_BRC_FRAME_TYPE_INVALID
+
 };
 
 //!
@@ -1434,6 +1439,7 @@ public:
     bool          m_isMaxLcu64                            = false;                        //!< Flag to specify if max LCU size is 64
     uint32_t      m_sizeOfMvTemporalBuffer                = 0;                            //!< MV temporal buffer size
     bool          m_encode4KSequence                      = false;                        //!< Flag to specify if input sequence is 4k size
+    bool          m_encode16KSequence                     = false;                        //!< Flag to specify if input sequence is 16k size
     bool          m_hevcRdoqEnabled                       = false;                        //!< RDOQ enable flag
     uint32_t      m_rdoqIntraTuThreshold                  = 0;                            //!< RDOQ intra threshold
     bool          m_hevcIFrameRdoqEnabled                 = true;                        //!< Control intra frame RDOQ enable/disable
@@ -1641,7 +1647,8 @@ public:
     //!
     virtual MOS_STATUS SendPrologWithFrameTracking(
         PMOS_COMMAND_BUFFER cmdBuffer,
-        bool frameTrackingRequested);
+        bool frameTrackingRequested,
+        MHW_MI_MMIOREGISTERS *mmioRegister = nullptr);
 
     //!
     //! \brief    Wait for dependent VDBOX to get ready

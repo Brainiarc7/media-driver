@@ -194,10 +194,14 @@ MOS_STATUS HalCm_AllocateTsResource(
     allocParams.TileType= MOS_TILE_LINEAR;
     allocParams.pBufName = "TsResource";
 
-    CM_CHK_HRESULT_GOTOFINISH_MOSERROR(osInterface->pfnAllocateResource(
-        osInterface,
-        &allocParams,
-        &state->renderTimeStampResource.osResource));
+    CM_CHK_HRESULT_GOTOFINISH_MOSERROR(
+        osInterface->pfnAllocateResource(osInterface,
+                                         &allocParams,
+                                         &state->renderTimeStampResource.osResource));
+    CM_CHK_MOSSTATUS_GOTOFINISH(
+        osInterface->pfnRegisterResource(osInterface,
+                                         &state->renderTimeStampResource.osResource,
+                                         true, true));
 
     osInterface->pfnSkipResourceSync(&state->renderTimeStampResource.osResource);
 
@@ -4981,6 +4985,7 @@ MOS_STATUS HalCm_SetupSampler8x8SurfaceState(
 
         surface.Rotation = state->umdSurf2DTable[index].rotationFlag;
         surface.ChromaSiting = state->umdSurf2DTable[index].chromaSiting;
+        surface.ScalingMode = RENDERHAL_SCALING_AVS;
         nSurfaceEntries = 0;
 
         // interlace setting
@@ -7944,7 +7949,10 @@ MOS_STATUS HalCm_Allocate(
     CM_CHK_MOSSTATUS_GOTOFINISH(renderHal->pfnInitialize(renderHal, nullptr));
 
     // Initialize Vebox Interface
-    CM_CHK_MOSSTATUS_GOTOFINISH(state->veboxInterface->CreateHeap());
+    if (state->veboxInterface)
+    {
+        CM_CHK_MOSSTATUS_GOTOFINISH(state->veboxInterface->CreateHeap());
+    }
 
     // Initialize the table only in Static Mode (DSH doesn't use this table at all)
     if (!state->dshEnabled)
@@ -8040,18 +8048,18 @@ MOS_STATUS HalCm_Allocate(
     if (state->refactor)
     {
         state->advExecutor = CmExtensionCreator<CmExecutionAdv>::CreateClass();
+        if (state->advExecutor == nullptr)
+        {
+            CM_ASSERTMESSAGE("Could not allocate enough memory for state->advExecutor\n");
+            eStatus = MOS_STATUS_NO_SPACE;
+            goto finish;
+        }
+        state->advExecutor->Initialize(state);
     }
     else
     {
-        state->advExecutor = CmExtensionCreator<CmExecutionAdv>::CreateBaseClass();
+        state->advExecutor = nullptr;
     }
-    if (state->advExecutor == nullptr)
-    {
-        CM_ASSERTMESSAGE("Could not allocate enough memory for state->advExecutor\n");
-        eStatus = MOS_STATUS_NO_SPACE;
-        goto finish;
-    }
-    state->advExecutor->Initialize(state);
 
     eStatus = MOS_STATUS_SUCCESS;
 
@@ -8130,8 +8138,8 @@ MOS_STATUS HalCm_ExecuteTask(
     int32_t                 taskId;
     int32_t                 remBindingTables;
     int32_t                 bindingTable;
-    int32_t                 bti;
-    int32_t                 mediaID;
+    int32_t                 bti = 0;
+    int32_t                 mediaID = 0;
     PRENDERHAL_KRN_ALLOCATION krnAllocations[CM_MAX_KERNELS_PER_TASK];
     uint32_t                vfeCurbeSize;
     uint32_t                maxInlineDataSize, maxIndirectDataSize;
@@ -8157,8 +8165,6 @@ MOS_STATUS HalCm_ExecuteTask(
         CM_ASSERTMESSAGE("Number of Kernels per task exceeds maximum");
         goto finish;
     }
-
-    state->osInterface->pfnSetGpuContext(state->osInterface, (MOS_GPU_CONTEXT)execParam->queueOption.GPUContext);
 
     // Reset states before execute
     // (clear allocations, get GSH allocation index + any additional housekeeping)
@@ -8452,8 +8458,8 @@ MOS_STATUS HalCm_ExecuteGroupTask(
     int32_t                 taskId;
     uint32_t                remBindingTables;
     int32_t                 bindingTable;
-    int32_t                 bti;
-    int32_t                 mediaID;
+    int32_t                 bti = 0;
+    int32_t                 mediaID = 0;
     PRENDERHAL_MEDIA_STATE  mediaState = nullptr;
     uint32_t                i;
     void                    *cmdBuffer   = nullptr;
@@ -8468,8 +8474,6 @@ MOS_STATUS HalCm_ExecuteGroupTask(
     CM_ASSERT(state);
     CM_ASSERT(execGroupParam);
     //-----------------------------------
-
-    state->osInterface->pfnSetGpuContext(state->osInterface, (MOS_GPU_CONTEXT)execGroupParam->queueOption.GPUContext);
 
     MOS_ZeroMemory(state->taskParam, sizeof(CM_HAL_TASK_PARAM));
     MOS_ZeroMemory(&indexParam, sizeof(CM_HAL_INDEX_PARAM));
@@ -8736,8 +8740,6 @@ MOS_STATUS HalCm_ExecuteHintsTask(
         CM_ASSERTMESSAGE("Number of Kernels per task exceeds maximum");
         goto finish;
     }
-
-    state->osInterface->pfnSetGpuContext(state->osInterface, (MOS_GPU_CONTEXT)execHintsParam->queueOption.GPUContext);
 
     bindingTableEntries = (int*)MOS_AllocAndZeroMemory(sizeof(int)*execHintsParam->numKernels);
     mediaIds = (int*)MOS_AllocAndZeroMemory(sizeof(int)* execHintsParam->numKernels);
@@ -9308,7 +9310,10 @@ MOS_STATUS HalCm_SetSurfaceReadFlag(
     if (HalCm_IsValidGpuContext(gpuContext))
     {
         entry->readSyncs[gpuContext] = readSync;
-        state->advExecutor->Set2DRenderTarget(entry->surfStateMgr, !readSync);
+        if (state->advExecutor)
+        {
+            state->advExecutor->Set2DRenderTarget(entry->surfStateMgr, !readSync);
+        }
     }
     else
     {
@@ -9335,7 +9340,6 @@ MOS_STATUS HalCm_LockBuffer(
     osInterface    = state->osInterface;
 
     CM_CHK_MOSSTATUS_GOTOFINISH(HalCm_GetBufferEntry(state, param->handle, &entry));
-
     if ((param->lockFlag != CM_HAL_LOCKFLAG_READONLY) && (param->lockFlag != CM_HAL_LOCKFLAG_WRITEONLY) )
     {
         eStatus = MOS_STATUS_INVALID_HANDLE;
@@ -9343,6 +9347,10 @@ MOS_STATUS HalCm_LockBuffer(
         eStatus = MOS_STATUS_UNKNOWN;
         goto finish;
     }
+
+    CM_CHK_HRESULT_GOTOFINISH_MOSERROR(
+        osInterface->pfnRegisterResource(osInterface, &entry->osResource, true,
+                                         true));
 
     // Lock the resource
     MOS_ZeroMemory(&lockFlags, sizeof(MOS_LOCK_PARAMS));
@@ -9542,23 +9550,35 @@ MOS_STATUS HalCm_SetSurfaceMOCS(
     {
         case CM_ARGUMENT_SURFACEBUFFER:
             state->bufferTable[handle].memObjCtl = mocs;
-            state->advExecutor->SetBufferMemoryObjectControl(state->bufferTable[handle].surfStateMgr, mocs);
+            if (state->advExecutor)
+            {
+                state->advExecutor->SetBufferMemoryObjectControl(state->bufferTable[handle].surfStateMgr, mocs);
+            }
             break;
         case CM_ARGUMENT_SURFACE2D:
         case CM_ARGUMENT_SURFACE2D_SAMPLER:
         case CM_ARGUMENT_SURFACE_SAMPLER8X8_AVS:
         case CM_ARGUMENT_SURFACE_SAMPLER8X8_VA:
             state->umdSurf2DTable[handle].memObjCtl = mocs;
-            state->advExecutor->Set2Dor3DMemoryObjectControl(state->umdSurf2DTable[handle].surfStateMgr, mocs);
+            if (state->advExecutor)
+            {
+                state->advExecutor->Set2Dor3DMemoryObjectControl(state->umdSurf2DTable[handle].surfStateMgr, mocs);
+            }
             break;
         case CM_ARGUMENT_SURFACE2D_UP:
         case CM_ARGUMENT_SURFACE2DUP_SAMPLER:
             state->surf2DUPTable[handle].memObjCtl = mocs;
-            state->advExecutor->Set2Dor3DMemoryObjectControl(state->surf2DUPTable[handle].surfStateMgr, mocs);
+            if (state->advExecutor)
+            {
+                state->advExecutor->Set2Dor3DMemoryObjectControl(state->surf2DUPTable[handle].surfStateMgr, mocs);
+            }
             break;
         case CM_ARGUMENT_SURFACE3D:
             state->surf3DTable[handle].memObjCtl = mocs;
-            state->advExecutor->Set2Dor3DMemoryObjectControl(state->surf3DTable[handle].surfStateMgr, mocs);
+            if (state->advExecutor)
+            {
+                state->advExecutor->Set2Dor3DMemoryObjectControl(state->surf3DTable[handle].surfStateMgr, mocs);
+            }
             break;
         default:
             eStatus = MOS_STATUS_INVALID_PARAMETER;
@@ -9640,7 +9660,7 @@ MOS_STATUS HalCm_AllocateSurface2D(
         HalCm_OsResource_Reference(&entry->osResource);
     }
     // set default CM MOS usage
-    entry->memObjCtl = MOS_CM_RESOURCE_USAGE_SurfaceState << 8;
+    entry->memObjCtl = (state->cmHalInterface->GetDefaultMOCS()) << 8;
 
     if (state->advExecutor)
     {
@@ -10064,7 +10084,8 @@ MOS_STATUS HalCm_SetCaps(
         }
         else
         {
-            state->maxHWThreadValues.apiValue = setCapsParam->maxValue;
+            state->maxHWThreadValues.apiValue = (setCapsParam->maxValue == 0) ? 0:
+                    MOS_MAX(setCapsParam->maxValue, state->cmHalInterface->GetSmallestMaxThreadNum());
         }
         break;
 
@@ -10309,6 +10330,23 @@ CM_STATE_BUFFER_TYPE HalCm_GetStateBufferTypeForKernel(
     }
 }
 
+void LoadUserFeatures(MOS_GPUCTX_CREATOPTIONS *createOptions)
+{
+#if (_DEBUG || _RELEASE_INTERNAL)
+    MOS_USER_FEATURE_VALUE_DATA  user_feature_data;
+    MOS_ZeroMemory(&user_feature_data, sizeof(user_feature_data));
+    MOS_STATUS result
+            = MOS_UserFeature_ReadValue_ID(
+                nullptr, __MEDIA_USER_FEATURE_VALUE_MDF_FORCE_RAMODE,
+                &user_feature_data);
+    if (MOS_STATUS_SUCCESS == result && user_feature_data.i32Data == 1)
+    {
+        createOptions->RAMode = 1;
+    }
+#endif
+    return;
+}
+
 MOS_STATUS HalCm_CreateGPUContext(
     PCM_HAL_STATE            state,
     MOS_GPU_CONTEXT          gpuContext,
@@ -10316,6 +10354,8 @@ MOS_STATUS HalCm_CreateGPUContext(
     PMOS_GPUCTX_CREATOPTIONS pMosGpuContextCreateOption)
 {
     MOS_STATUS eStatus = MOS_STATUS_SUCCESS;
+
+    LoadUserFeatures(pMosGpuContextCreateOption);
 
     // Create Compute Context on Compute Node
     CM_CHK_HRESULT_GOTOFINISH_MOSERROR(state->osInterface->pfnCreateGpuContext(
@@ -10331,6 +10371,65 @@ MOS_STATUS HalCm_CreateGPUContext(
 
 finish:
     return eStatus;
+}
+
+GPU_CONTEXT_HANDLE
+HalCm_CreateGpuComputeContext(CM_HAL_STATE *state,
+                              MOS_GPUCTX_CREATOPTIONS *createOptions)
+{
+    LoadUserFeatures(createOptions);
+
+    GPU_CONTEXT_HANDLE context_handle
+            = state->osInterface->pfnCreateGpuComputeContext(
+                state->osInterface, MOS_GPU_CONTEXT_CM_COMPUTE, createOptions);
+    if (MOS_GPU_CONTEXT_INVALID_HANDLE != context_handle)
+    {
+        state->osInterface->pfnRegisterBBCompleteNotifyEvent(
+            state->osInterface, MOS_GPU_CONTEXT_CM_COMPUTE);
+    }
+    return context_handle;
+}
+
+uint32_t HalCm_SetGpuContext(CM_HAL_STATE *halState,
+                             MOS_GPU_CONTEXT contextName,
+                             uint32_t streamIndex,
+                             GPU_CONTEXT_HANDLE contextHandle)
+{
+    uint32_t old_stream_idx = halState->osInterface->streamIndex;
+    halState->osInterface->streamIndex = streamIndex;
+    MOS_STATUS result = MOS_STATUS_SUCCESS;
+
+    if (MOS_GPU_CONTEXT_INVALID_HANDLE == contextHandle)
+    {
+        result = halState->osInterface->pfnSetGpuContext(halState->osInterface,
+                                                         contextName);
+    }
+    else
+    {
+        result = halState->osInterface->pfnSetGpuContextFromHandle(
+            halState->osInterface, contextName, contextHandle);
+    }
+
+    if (MOS_STATUS_SUCCESS != result)
+    {
+        halState->osInterface->streamIndex = old_stream_idx;
+        return INVALID_STREAM_INDEX;
+    }
+    return old_stream_idx;
+}
+
+MOS_STATUS HalCm_SelectSyncBuffer(CM_HAL_STATE *halState, uint32_t bufferIdx)
+{
+    if (bufferIdx >= halState->cmDeviceParam.maxBufferTableSize)
+    {
+        halState->syncBuffer = nullptr;
+        return MOS_STATUS_SUCCESS;
+    }
+    CM_HAL_BUFFER_ENTRY *entry = halState->bufferTable + bufferIdx;
+    halState->syncBuffer = &entry->osResource;
+    MOS_INTERFACE *os_interface = halState->osInterface;
+    return os_interface->pfnRegisterResource(os_interface, halState->syncBuffer,
+                                             true, true);
 }
 
 //*-----------------------------------------------------------------------------
@@ -10349,6 +10448,7 @@ MOS_STATUS HalCm_Create(
     uint32_t            numCmdBuffers = 0;
     MhwInterfaces       *mhwInterfaces = nullptr;
     MhwInterfaces::CreateParams params;
+    MOS_GPUCTX_CREATOPTIONS createOption;
 
     //-----------------------------------------
     CM_ASSERT(osDriverContext);
@@ -10378,17 +10478,13 @@ MOS_STATUS HalCm_Create(
     state->skuTable = state->osInterface->pfnGetSkuTable(state->osInterface);
     state->waTable  = state->osInterface->pfnGetWaTable (state->osInterface);
 
-    {
-        MOS_GPUCTX_CREATOPTIONS createOption;
-
-        // Create VEBOX Context
-        createOption.CmdBufferNumScale = MOS_GPU_CONTEXT_CREATE_DEFAULT;
-        CM_CHK_MOSSTATUS_GOTOFINISH(HalCm_CreateGPUContext(
-            state,
-            MOS_GPU_CONTEXT_VEBOX,
-            MOS_GPU_NODE_VE,
-            &createOption));
-    }
+    // Create VEBOX Context
+    createOption.CmdBufferNumScale = MOS_GPU_CONTEXT_CREATE_DEFAULT;
+    CM_CHK_MOSSTATUS_GOTOFINISH(HalCm_CreateGPUContext(
+        state,
+        MOS_GPU_CONTEXT_VEBOX,
+        MOS_GPU_NODE_VE,
+        &createOption));
 
     // Allocate/Initialize CM Rendering Interface
     state->renderHal = (PRENDERHAL_INTERFACE)
@@ -10408,24 +10504,31 @@ MOS_STATUS HalCm_Create(
     }
 
     // Allocate/Initialize VEBOX Interface
-    CmSafeMemSet(&params, 0, sizeof(params));
-    params.Flags.m_vebox = 1;
-    mhwInterfaces = MhwInterfaces::CreateFactory(params, state->osInterface);
-    if (mhwInterfaces)
+    if (!param->disableVebox)
     {
-        CM_CHK_NULL_GOTOFINISH_MOSERROR(mhwInterfaces->m_veboxInterface);
-        state->veboxInterface = mhwInterfaces->m_veboxInterface;       
-        
-        // MhwInterfaces always create CP and MI interfaces, so we have to delete those we don't need.
-        MOS_Delete(mhwInterfaces->m_miInterface);
-        Delete_MhwCpInterface(mhwInterfaces->m_cpInterface);
-        mhwInterfaces->m_cpInterface = nullptr;
-        MOS_Delete(mhwInterfaces);
+        CmSafeMemSet(&params, 0, sizeof(params));
+        params.Flags.m_vebox = 1;
+        mhwInterfaces = MhwInterfaces::CreateFactory(params, state->osInterface);
+        if (mhwInterfaces)
+        {
+            CM_CHK_NULL_GOTOFINISH_MOSERROR(mhwInterfaces->m_veboxInterface);
+            state->veboxInterface = mhwInterfaces->m_veboxInterface;
+
+            // MhwInterfaces always create CP and MI interfaces, so we have to delete those we don't need.
+            MOS_Delete(mhwInterfaces->m_miInterface);
+            Delete_MhwCpInterface(mhwInterfaces->m_cpInterface);
+            mhwInterfaces->m_cpInterface = nullptr;
+            MOS_Delete(mhwInterfaces);
+        }
+        else
+        {
+            CM_ASSERTMESSAGE("Allocate MhwInterfaces failed");
+            return MOS_STATUS_NO_SPACE;
+        }
     }
     else
     {
-        CM_ASSERTMESSAGE("Allocate MhwInterfaces failed");
-        return MOS_STATUS_NO_SPACE;
+        state->veboxInterface = nullptr;
     }
 
     // set IsMDFLoad to distinguish MDF context from other Media Contexts
@@ -10570,6 +10673,9 @@ MOS_STATUS HalCm_Create(
     state->pfnGetStateBufferSizeForKernel = HalCm_GetStateBufferSizeForKernel;
     state->pfnGetStateBufferTypeForKernel = HalCm_GetStateBufferTypeForKernel;
     state->pfnCreateGPUContext            = HalCm_CreateGPUContext;
+    state->pfnCreateGpuComputeContext     = HalCm_CreateGpuComputeContext;
+    state->pfnSetGpuContext               = HalCm_SetGpuContext;
+    state->pfnSelectSyncBuffer            = HalCm_SelectSyncBuffer;
     state->pfnDSHUnregisterKernel         = HalCm_DSH_UnregisterKernel;
 
     state->pfnUpdateBuffer                = HalCm_UpdateBuffer;
@@ -10626,11 +10732,30 @@ MOS_STATUS HalCm_Create(
 
 #if (_DEBUG || _RELEASE_INTERNAL)
     {
+        MOS_USER_FEATURE_VALUE_DATA userFeatureData;
+
+        MOS_ZeroMemory(&userFeatureData, sizeof(userFeatureData));
+        MOS_UserFeature_ReadValue_ID(
+            nullptr,
+            __MEDIA_USER_FEATURE_VALUE_MDF_FORCE_EXECUTION_PATH_ID,
+            &userFeatureData);
+
+        if (userFeatureData.i32Data == 1)
+        {
+            state->refactor = false;
+        }
+        else if (userFeatureData.i32Data == 2)
+        {
+            state->refactor = true;
+            state->cmHalInterface->SetFastPathByDefault(true);
+        }
+
         FILE *fp1 = nullptr;
         MOS_SecureFileOpen(&fp1, "refactor.key", "r");
         if (fp1 != nullptr)
         {
             state->refactor = true;
+            state->cmHalInterface->SetFastPathByDefault(true);
             fclose(fp1);
         }
 
@@ -10642,16 +10767,16 @@ MOS_STATUS HalCm_Create(
             fclose(fp2);
         }
     }
+#endif
+
     if (state->refactor)
     {
-        CM_NORMALMESSAGE("Use refactor path!\n");
+        CM_NORMALMESSAGE("Info: Fast path is enabled!\n");
     }
     else
     {
-        CM_NORMALMESSAGE("Use origin path!\n");
+        CM_NORMALMESSAGE("Info: Fast path is disabled!\n");
     }
-
-#endif
 
 finish:
     if (eStatus != MOS_STATUS_SUCCESS)
@@ -10804,32 +10929,25 @@ void HalCm_GetUserFeatureSettings(
 )
 {
 #if (_DEBUG || _RELEASE_INTERNAL)
-    PMOS_INTERFACE                  osInterface;
-    PMOS_USER_FEATURE_INTERFACE     userFeatureInterface;
-    MOS_USER_FEATURE                userFeature;
-    MOS_USER_FEATURE_VALUE          userFeatureValue;
+    PMOS_INTERFACE osInterface = cmState->osInterface;
 
-    MOS_ZeroMemory(&userFeatureValue, sizeof(userFeatureValue));
-    osInterface            = cmState->osInterface;
-    userFeatureInterface   = &osInterface->UserFeatureInterface;
-    userFeature             = *userFeatureInterface->pUserFeatureInit;
-    userFeature.Type        = MOS_USER_FEATURE_TYPE_USER;
-    userFeature.pPath       = (char *)__MEDIA_USER_FEATURE_SUBKEY_INTERNAL;
-    userFeature.pValues     = &userFeatureValue;
-    userFeature.uiNumValues = 1;
+    MOS_USER_FEATURE_VALUE_DATA userFeatureData;
 
-    if (userFeatureInterface->pfnReadValue(
-          userFeatureInterface,
-          &userFeature,
-          (char *)VPHAL_CM_MAX_THREADS,
-          MOS_USER_FEATURE_VALUE_TYPE_UINT32) == MOS_STATUS_SUCCESS)
+    MOS_ZeroMemory(&userFeatureData, sizeof(userFeatureData));
+    MOS_UserFeature_ReadValue_ID(
+        nullptr,
+        __MEDIA_USER_FEATURE_VALUE_MDF_MAX_THREAD_NUM_ID,
+        &userFeatureData);
+
+    if (userFeatureData.i32Data != 0)
     {
-        uint32_t data = userFeature.pValues[0].u32Data;
+        uint32_t data = userFeatureData.i32Data;
         if ((data > 0) && (data <= cmState->renderHal->pHwCaps->dwMaxThreads))
         {
             cmState->maxHWThreadValues.userFeatureValue = data;
         }
     }
+
 #else
     UNUSED(cmState);
 #endif // _DEBUG || _RELEASE_INTERNAL

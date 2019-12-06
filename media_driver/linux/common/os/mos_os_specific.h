@@ -47,6 +47,7 @@ class GraphicsResource;
 class GraphicsResourceNext;
 class AuxTableMgr;
 class MosOcaInterface;
+class GraphicsResourceNext;
 
 ////////////////////////////////////////////////////////////////////
 
@@ -201,6 +202,10 @@ static inline MOS_GPU_NODE OSKMGetGpuNode(MOS_GPU_CONTEXT uiGpuContext)
         case MOS_GPU_CONTEXT_VIDEO:
         case MOS_GPU_CONTEXT_VIDEO2:
         case MOS_GPU_CONTEXT_VIDEO3:
+        case MOS_GPU_CONTEXT_VIDEO4:
+        case MOS_GPU_CONTEXT_VIDEO5:
+        case MOS_GPU_CONTEXT_VIDEO6:
+        case MOS_GPU_CONTEXT_VIDEO7:
             return MOS_GPU_NODE_VIDEO;
             break;
         case MOS_GPU_CONTEXT_VDBOX2_VIDEO:
@@ -252,7 +257,7 @@ struct _MOS_SPECIFIC_RESOURCE
     GMM_RESOURCE_INFO   *pGmmResInfo;        //!< GMM resource descriptor
     MOS_MMAP_OPERATION  MmapOperation;
     uint8_t             *pSystemShadow;
-    bool                bUsrPtrMode;        //!< indicate source info comes from app.
+    bool                b16UsrPtrMode;      //!< indicate source info comes from app.
     MOS_PLANE_OFFSET    YPlaneOffset;       //!< Y surface plane offset
     MOS_PLANE_OFFSET    UPlaneOffset;       //!< U surface plane offset
     MOS_PLANE_OFFSET    VPlaneOffset;       //!< V surface plane offset
@@ -355,6 +360,20 @@ struct MOS_SURFACE
 typedef MOS_SURFACE *PMOS_SURFACE;
 
 //!
+//! \brief Structure to MOS_BUFFER
+//!
+struct MOS_BUFFER
+{
+    MOS_RESOURCE    OsResource; //!< Buffer resource
+    uint32_t        size;       //!< Buffer size
+    const char*     name;           //!< Buffer name
+    bool            initOnAllocate; //!< Flag to indicate whether initialize when allocate
+    uint8_t         initValue;      //!< Initialize value when initOnAllocate is set
+    bool            bPersistent;    //!< Persistent flag
+};
+typedef MOS_BUFFER *PMOS_BUFFER;
+
+//!
 //! \brief Structure to patch location list
 //!
 typedef struct _PATCHLOCATIONLIST
@@ -365,6 +384,7 @@ typedef struct _PATCHLOCATIONLIST
     uint32_t                    cpCmdProps;
     int32_t                     uiRelocFlag;
     uint32_t                    uiWriteOperation;
+    MOS_LINUX_BO                *cmdBo;
 } PATCHLOCATIONLIST, *PPATCHLOCATIONLIST;
 
 //#define PATCHLOCATIONLIST_SIZE 25
@@ -465,6 +485,22 @@ struct MOS_CONTEXT_OFFSET
     uint64_t          offset64;
 };
 
+// APO related
+#define FUTURE_PLATFORM_MOS_APO   1234
+void SetupApoMosSwitch(PLATFORM *platform);
+
+enum OS_SPECIFIC_RESOURCE_TYPE
+{
+    OS_SPECIFIC_RESOURCE_INVALID = 0,
+    OS_SPECIFIC_RESOURCE_SURFACE = 1,
+    OS_SPECIFIC_RESOURCE_BUFFER = 2,
+    OS_SPECIFIC_RESOURCE_MAX
+};
+
+class OsContextNext;
+typedef OsContextNext    OsDeviceContext;
+typedef OsDeviceContext *MOS_DEVICE_HANDLE;
+
 typedef struct _MOS_OS_CONTEXT MOS_CONTEXT, *PMOS_CONTEXT, MOS_OS_CONTEXT, *PMOS_OS_CONTEXT, MOS_DRIVER_CONTEXT,*PMOS_DRIVER_CONTEXT;
 //!
 //! \brief Structure to OS context
@@ -517,6 +553,7 @@ struct _MOS_OS_CONTEXT
     // For modulized GPU context
     void*               m_gpuContextMgr;
     void*               m_cmdBufMgr;
+    MOS_DEVICE_HANDLE   m_osDeviceContext = nullptr;
 
     //For 2VD box
     int32_t             bKMDHasVCS2;

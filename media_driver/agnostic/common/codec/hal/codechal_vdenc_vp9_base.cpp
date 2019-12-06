@@ -2189,7 +2189,7 @@ MOS_STATUS CodechalVdencVp9State::DysRefFrames()
     allocParamsForBuffer.Type = MOS_GFXRES_2D;
     allocParamsForBuffer.TileType = MOS_TILE_Y;
     allocParamsForBuffer.Format = m_reconSurface.Format;
-    allocParamsForBuffer.bIsCompressed = IsToBeCompressed(true);
+    allocParamsForBuffer.bIsCompressible = IsToBeCompressed(true);
 
     PCODEC_REF_LIST *refList = &m_refList[0];
     if (Mos_ResourceIsNull(&refList[idx]->sDysSurface.OsResource) ||
@@ -3760,16 +3760,25 @@ MOS_STATUS CodechalVdencVp9State::RefreshFrameInternalBuffers()
         m_osInterface,
         &m_resCompressedHeaderBuffer,
         &lockFlagsWriteOnly);
-    CODECHAL_ENCODE_CHK_NULL_RETURN(data);
+    if(data == nullptr)
+    {
+        MOS_FreeMemory(compressedHdr);
+        CODECHAL_ENCODE_CHK_NULL_RETURN(nullptr);
+    }
 
     for (uint32_t i = 0; i < PAK_COMPRESSED_HDR_SYNTAX_ELEMS; i += 2)
     {
         data[i>>1] = (compressedHdr[i + 1].value << 0x04) | (compressedHdr[i].value);
     }
 
-    CODECHAL_ENCODE_CHK_STATUS_RETURN(m_osInterface->pfnUnlockResource(
+    eStatus = (MOS_STATUS) m_osInterface->pfnUnlockResource(
         m_osInterface,
-        &m_resCompressedHeaderBuffer));
+        &m_resCompressedHeaderBuffer);
+    if (eStatus != MOS_STATUS_SUCCESS)
+    {
+        MOS_FreeMemory(compressedHdr);
+        CODECHAL_ENCODE_CHK_STATUS_RETURN(eStatus);
+    }
 
     MOS_FreeMemory(compressedHdr);
     return eStatus;
@@ -5735,6 +5744,22 @@ MOS_STATUS CodechalVdencVp9State::SetPictureStructs()
     return eStatus;
 }
 
+MOS_STATUS CodechalVdencVp9State::SetRowstoreCachingOffsets()
+{
+    MOS_STATUS eStatus = MOS_STATUS_SUCCESS;
+    if (m_vdencEnabled &&
+        m_hwInterface->GetHcpInterface()->IsRowStoreCachingSupported())
+    {
+        MHW_VDBOX_ROWSTORE_PARAMS rowStoreParams;
+        rowStoreParams.Mode             = m_mode;
+        rowStoreParams.dwPicWidth       = m_frameWidth;
+        rowStoreParams.ucChromaFormat   = m_chromaFormat;
+        rowStoreParams.ucBitDepthMinus8 = m_bitDepth * 2;  // 0(8bit) -> 0, 1(10bit)->2, 2(12bit)->4
+        m_hwInterface->SetRowstoreCachingOffsets(&rowStoreParams);
+    }
+    return eStatus;
+}
+
 MOS_STATUS CodechalVdencVp9State::InitializePicture(const EncoderParams& params)
 {
     MOS_STATUS eStatus = MOS_STATUS_SUCCESS;
@@ -5817,16 +5842,9 @@ MOS_STATUS CodechalVdencVp9State::InitializePicture(const EncoderParams& params)
     }
 
     CODECHAL_ENCODE_CHK_STATUS_RETURN(SetPictureStructs());
-    if (m_vdencEnabled &&
-        m_hwInterface->GetHcpInterface()->IsRowStoreCachingSupported())
-    {
-        MHW_VDBOX_ROWSTORE_PARAMS rowStoreParams;
-        rowStoreParams.Mode = m_mode;
-        rowStoreParams.dwPicWidth = m_frameWidth;
-        rowStoreParams.ucChromaFormat = m_chromaFormat;
-        rowStoreParams.ucBitDepthMinus8 = m_bitDepth * 2; // 0(8bit) -> 0, 1(10bit)->2, 2(12bit)->4
-        m_hwInterface->SetRowstoreCachingOffsets(&rowStoreParams);
-    }
+
+    CODECHAL_ENCODE_CHK_STATUS_RETURN(SetRowstoreCachingOffsets());
+
     m_pictureStatesSize = m_defaultPictureStatesSize;
     m_picturePatchListSize = m_defaultPicturePatchListSize;
 

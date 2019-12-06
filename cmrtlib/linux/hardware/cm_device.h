@@ -110,7 +110,7 @@ public:
     CM_RT_API int32_t GetVaDpy(VADisplay* &vaDisplay);
     CM_RT_API int32_t CreateVaSurface2D( uint32_t width, uint32_t height, CM_SURFACE_FORMAT format, VASurfaceID & vaSurface, CmSurface2D* & surface);
 
-  CM_RT_API int32_t CreateSamplerSurface2DUP(CmSurface2DUP* surface2dUP, SurfaceIndex* & samplerSurface2dUPIndex);
+    CM_RT_API int32_t CreateSamplerSurface2DUP(CmSurface2DUP* surface2dUP, SurfaceIndex* & samplerSurface2dUPIndex);
 
     CM_RT_API int32_t CreateSurface2DAlias(CmSurface2D* originalSurface, SurfaceIndex* &aliasIndex);
 
@@ -126,6 +126,21 @@ public:
 
     CM_RT_API int32_t GetVISAVersion(uint32_t& majorVersion, uint32_t& minorVersion);
     CM_RT_API int32_t CreateQueueEx(CmQueue *&queue, CM_QUEUE_CREATE_OPTION queueCreateOption = CM_DEFAULT_QUEUE_CREATE_OPTION);
+
+    CM_RT_API int32_t CreateBufferStateless(size_t size,
+                                            uint32_t option,
+                                            void *sysMem,
+                                            CmBufferStateless *&pBufferStateless);
+    CM_RT_API int32_t DestroyBufferStateless(CmBufferStateless *&buffer);
+
+    CM_RT_API int32_t DispatchTask() { return CM_SUCCESS; }
+
+    CM_RT_API int32_t CreateSurface2DStateless(uint32_t width,
+                                               uint32_t height,
+                                               uint32_t &pitch,
+                                               CmSurface2DStateless *&pSurface);
+
+    CM_RT_API int32_t DestroySurface2DStateless(CmSurface2DStateless *&pSurface);
 
     int32_t CheckDdiVersionSupported(const uint32_t ddiVersion);
 
@@ -174,7 +189,7 @@ protected:
     int32_t GetLibvaDisplayDrm(VADisplay & vaDisplay);
 #endif
     int32_t InitializeLibvaDisplay( void );
-    
+
     VADisplay m_vaDisplay;
     pvaCmExtSendReqMsg    m_fvaCmExtSendReqMsg;
 
@@ -195,10 +210,6 @@ protected:
     CmBufferUP*     m_gtpinBufferUP0;
     CmBufferUP*     m_gtpinBufferUP1;
     CmBufferUP*     m_gtpinBufferUP2;
-
-    unsigned char* m_printBuffer;
-    bool           m_printEnabled;
-    size_t         m_printBufferSize;
 
     uint32_t       m_createOption;
     uint32_t       m_driverStoreEnabled;

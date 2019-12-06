@@ -407,7 +407,7 @@ typedef struct _CODEC_AVC_ENCODE_SEQUENCE_PARAMS
             uint32_t           MBBRC                        : 4;
             /*! \brief Indicates trellis control.
             *
-            *    The Trellis_I, Trellis_P and Trellis_B settings may be combined using bitwise OR like “Trellis_I | Trellis_P” to enable Trellis for I & P.  If Trellis_Disabled is set with any combination, Trellis will be disabled.
+            *    The Trellis_I, Trellis_P and Trellis_B settings may be combined using bitwise OR like "Trellis_I | Trellis_P" to enable Trellis for I & P.  If Trellis_Disabled is set with any combination, Trellis will be disabled.
             *        \n - 0: Trellis_Default – Trellis decided internally.
             *        \n - 1: Trellis_Disabled – Trellis disabled for all frames/fields.
             *        \n - 2: Trellis_I – Trellis enabled for I frames/fields.
@@ -784,6 +784,11 @@ typedef struct _CODEC_AVC_ENCODE_PIC_PARAMS
     *    Value entries are ROI[0] up to ROI[NumROI – 1], inclusively, if NumROI > 0. And it can be ignored otherwise.
     */
     CODEC_ROI       ROI[16];
+    /*! \brief Distinct delta QP values assigned to the ROI
+    *
+    *    Value entries are distinct and within [MinDeltaQp..MaxDeltaQp].
+    */
+    int8_t ROIDistinctDeltaQp[16];
     /*! \brief indicate native ROI / force QP ROI to be used.
     */
     bool        bNativeROI;
@@ -923,6 +928,13 @@ typedef struct _CODEC_AVC_ENCODE_PIC_PARAMS
     *  Applicaiton sets to 1 if current frame is repeat frame. 
     */
     bool            bRepeatFrame;
+
+    /*! \brief Indicates if enable QP adjustment for current frame. 
+    *
+    *  Applicaiton sets to 1 to enable QP adjustment for current frame in CQP mode. 
+    *  When QP adjustment is enabled, driver calls MBBRC kernel to adjust per MB QP for perceptual quality in CQP mode.
+    */
+    bool            bEnableQpAdjustment;
 
     /*! \brief Indicates marker coordinates in raw surface for GPU polling based sync. 
     *

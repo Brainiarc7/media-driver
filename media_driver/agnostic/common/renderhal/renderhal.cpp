@@ -401,9 +401,9 @@ extern const MHW_SURFACE_PLANES g_cRenderHal_SurfacePlanes[RENDERHAL_PLANES_DEFI
     // RENDERHAL_PLANES_PL3_ADV
     {   3,
         {
-            { MHW_Y_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
-            { MHW_U_PLANE      , 2, 2, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
-            { MHW_V_PLANE      , 2, 2, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
+            { MHW_Y_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
+            { MHW_U_PLANE      , 2, 2, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
+            { MHW_V_PLANE      , 2, 2, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
         }
     },
     // RENDERHAL_PLANES_NV12_ADV
@@ -501,57 +501,57 @@ extern const MHW_SURFACE_PLANES g_cRenderHal_SurfacePlanes[RENDERHAL_PLANES_DEFI
     // RENDERHAL_PLANES_411P_ADV
     {   3,
         {
-            { MHW_Y_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
-            { MHW_U_PLANE      , 4, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
-            { MHW_V_PLANE      , 4, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
+            { MHW_Y_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
+            { MHW_U_PLANE      , 4, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
+            { MHW_V_PLANE      , 4, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
         }
     },
     // RENDERHAL_PLANES_411R_ADV
     {   3,
         {
-            { MHW_Y_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
-            { MHW_U_PLANE      , 1, 4, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
-            { MHW_V_PLANE      , 1, 4, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
+            { MHW_Y_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
+            { MHW_U_PLANE      , 1, 4, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
+            { MHW_V_PLANE      , 1, 4, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
         }
     },
     // RENDERHAL_PLANES_422H_ADV
     {   3,
         {
-            { MHW_Y_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
-            { MHW_U_PLANE      , 2, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
-            { MHW_V_PLANE      , 2, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
+            { MHW_Y_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
+            { MHW_U_PLANE      , 2, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
+            { MHW_V_PLANE      , 2, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
         }
     },
     // RENDERHAL_PLANES_422V_ADV
     {   3,
         {
-            { MHW_Y_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
-            { MHW_U_PLANE      , 1, 2, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
-            { MHW_V_PLANE      , 1, 2, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
+            { MHW_Y_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
+            { MHW_U_PLANE      , 1, 2, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
+            { MHW_V_PLANE      , 1, 2, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
         }
     },
     // RENDERHAL_PLANES_444P_ADV
     {   3,
         {
-            { MHW_Y_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
-            { MHW_U_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
-            { MHW_V_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
+            { MHW_Y_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
+            { MHW_U_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
+            { MHW_V_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
         }
     },
     // RENDERHAL_PLANES_RGBP_ADV
     {   3,
         {
-            { MHW_U_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
-            { MHW_V_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
-            { MHW_Y_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
+            { MHW_U_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
+            { MHW_V_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
+            { MHW_Y_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
         }
     },
     // RENDERHAL_PLANES_BGRP_ADV
     {   3,
         {
-            { MHW_U_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
-            { MHW_Y_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
-            { MHW_V_PLANE      , 1, 1, 2, 2, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
+            { MHW_U_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y8_UNORM },
+            { MHW_Y_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM },
+            { MHW_V_PLANE      , 1, 1, 1, 1, 4, 1, MHW_MEDIASTATE_SURFACEFORMAT_R8_UNORM }
         }
     },
     // RENDERHAL_PLANES_R16_UNORM
@@ -643,8 +643,8 @@ extern const MHW_SURFACE_PLANES g_cRenderHal_SurfacePlanes[RENDERHAL_PLANES_DEFI
     // RENDERHAL_PLANES_P016_2PLANES_ADV
     {   2,
         {
-            { MHW_Y_PLANE      , 1, 1, 2, 2, 2, 1, MHW_GFX3DSTATE_SURFACEFORMAT_R16_UNORM   },
-            { MHW_U_PLANE      , 2, 2, 2, 2, 1, 1, MHW_GFX3DSTATE_SURFACEFORMAT_R16G16_UNORM }
+            { MHW_Y_PLANE      , 1, 1, 2, 2, 2, 1, MHW_MEDIASTATE_SURFACEFORMAT_Y16_UNORM   },
+            { MHW_U_PLANE      , 2, 2, 2, 2, 1, 1, MHW_MEDIASTATE_SURFACEFORMAT_R16B16_UNORM }
         }
     },
     // RENDERHAL_PLANES_P010
@@ -3012,17 +3012,6 @@ MOS_STATUS RenderHal_GetSurfaceStateEntries(
                 Direction           = pRenderHal->pfnSetChromaDirection(pRenderHal, pRenderHalSurface);
                 break;
 
-            case Format_P016:
-                if (pParams->bVmeUse)
-                {
-                    PlaneDefinition = RENDERHAL_PLANES_P010_1PLANE_ADV;
-                }
-                else
-                {
-                    PlaneDefinition = RENDERHAL_PLANES_P016_2PLANES_ADV;
-                }
-                break;
-
             case Format_P208:
                 PlaneDefinition = RENDERHAL_PLANES_P208_1PLANE_ADV;
                 break;
@@ -3236,6 +3225,7 @@ MOS_STATUS RenderHal_GetSurfaceStateEntries(
                 break;
 
             case Format_P010:
+            case Format_P016:
                 if (pParams->bVmeUse)
                 {
                     PlaneDefinition = RENDERHAL_PLANES_P010_1PLANE_ADV;
@@ -3369,15 +3359,12 @@ MOS_STATUS RenderHal_GetSurfaceStateEntries(
                 PlaneDefinition = RENDERHAL_PLANES_NV12;
                 break;
 
-            case Format_P016:
-                PlaneDefinition = RENDERHAL_PLANES_P016;
-                break;
-
             case Format_P208:
                 PlaneDefinition = RENDERHAL_PLANES_P208;
                 break;
 
             case Format_P010:
+            case Format_P016:
                 if (pRenderHal->bEnableP010SinglePass &&
                     (pRenderHalSurface->SurfType != RENDERHAL_SURF_OUT_RENDERTARGET))
                 {
@@ -6735,7 +6722,10 @@ MOS_STATUS RenderHal_SendSurfaceStateEntry(
 
     MOS_MEMCOMP_STATE mmcMode = MOS_MEMCOMP_DISABLED;
     PMOS_RESOURCE pMosResource = (PMOS_RESOURCE)pSurfaceStateToken->pResourceInfo;
-    pOsInterface->pfnGetMemoryCompressionMode(pOsInterface, pMosResource, &mmcMode);
+    if (pOsInterface->pfnGetMemoryCompressionMode)
+    {
+        pOsInterface->pfnGetMemoryCompressionMode(pOsInterface, pMosResource, &mmcMode);
+    }
 
     if (mmcMode == MOS_MEMCOMP_RC && pSurfaceStateToken->DW3.SurfaceStateType == MEDIASTATE_BTS_DEFAULT_TYPE)
     {
@@ -6869,7 +6859,10 @@ MOS_STATUS RenderHal_InitInterface(
     // Initialize MHW State Heap Interface
     // Note: there are two pStateHeapInterface in below line. First one is pointer to legacy MHW_STATE_HEAP
     // sturcture, while the last one points to the new class.
-    pRenderHal->pMhwStateHeap = pRenderHal->pMhwRenderInterface->m_stateHeapInterface->pStateHeapInterface;
+    if (pRenderHal->pMhwRenderInterface->m_stateHeapInterface != nullptr)
+    {
+        pRenderHal->pMhwStateHeap = pRenderHal->pMhwRenderInterface->m_stateHeapInterface->pStateHeapInterface;
+    }
 
     pRenderHal->pHwCaps  = pRenderHal->pMhwRenderInterface->GetHwCaps();
 

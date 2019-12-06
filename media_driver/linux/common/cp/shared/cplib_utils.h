@@ -30,6 +30,7 @@
 
 #include <dlfcn.h>
 #include <unordered_map>
+#include <mutex>
 
 #define REQUIRED_CPLIB_MAJOR_VERSION 1
 
@@ -99,8 +100,13 @@ public:
     static const char* FUNC_DELETE_MEDIALIBVACAPSCP;
     static const char* FUNC_CREATE_SECUREDECODE;
     static const char* FUNC_DELETE_SECUREDECODE;
+    static const char* FUNC_CREATE_DECODECP;
+    static const char* FUNC_DELETE_DECODECP;
+    static const char* FUNC_SETUP_MOS_APO_SWITCH;
 
     static std::unordered_map<const char*, void*> m_symbols;
+    static std::mutex                             m_referenceMutex;
+    static int                                    m_referenceCount;
 
 private:
     static void* m_phandle;

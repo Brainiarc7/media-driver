@@ -152,6 +152,8 @@ struct CM_HAL_GENERIC
 
 public:
     PCM_HAL_STATE m_cmState;
+    const L3ConfigRegisterValues *m_l3Plane = nullptr;
+    size_t m_l3ConfigCount = 0;
 
     CM_HAL_GENERIC(PCM_HAL_STATE cmState) : m_cmState(cmState),
                                             m_platformID(PLATFORM_INTEL_UNKNOWN),
@@ -160,7 +162,9 @@ public:
                                             m_requestShutdownSubslicesForVmeUsage(false),
                                             m_overridePowerOptionPerGpuContext(false),
                                             m_redirectRcsToCcs(false),
-                                            m_decompress(false){};
+                                            m_decompress(false),
+                                            m_fastpathDefault(false),
+                                            m_defaultMocs(MOS_CM_RESOURCE_USAGE_SurfaceState){};
 
     virtual ~CM_HAL_GENERIC(){};
 
@@ -671,6 +675,66 @@ public:
         return MOS_STATUS_SUCCESS;
     }
 
+    //!
+    //! \brief    Whether switch to fast path by default
+    //! \return   true or false
+    //!
+    virtual void SetFastPathByDefault(bool flag)
+    {
+        m_fastpathDefault = flag;
+    }
+
+    //!
+    //! \brief    Whether switch to fast path by default
+    //! \return   true or false
+    //!
+    virtual bool IsFastPathByDefault()
+    {
+        return m_fastpathDefault;
+    }
+    
+    //! \brief    Get the smallest max thread number that can be set in VFE
+    //! \return   the smallest max thread number
+    //!
+    virtual uint32_t GetSmallestMaxThreadNum()
+    {
+        return 1;
+    }
+
+    //!
+    //! \brief    Set the default MOCS for this platform
+    //! \return   void
+    //!
+    inline void SetDefaultMOCS(MOS_HW_RESOURCE_DEF mocs)
+    {
+        m_defaultMocs = mocs;
+    }
+
+    //!
+    //! \brief    Get the default MOCS for this platform
+    //! \return   the default MOCS
+    //!
+    inline MOS_HW_RESOURCE_DEF GetDefaultMOCS()
+    {
+        return m_defaultMocs;
+    }
+
+    //! \brief    Check whether compressed output is needed
+    //! \return   true if compression format is needed
+    //!
+    virtual bool SupportCompressedOutput()
+    {
+        return false;
+    }
+
+    //! \brief    Check whether separate scratch space is needed
+    //! \return   true if separate scratch is needed
+    //!
+    virtual bool IsSeparateScratch()
+    {
+        return false;
+    }
+
 protected:
     uint32_t              m_platformID;
     uint32_t              m_genGT;
@@ -680,6 +744,8 @@ protected:
     bool                  m_overridePowerOptionPerGpuContext;
     bool                  m_redirectRcsToCcs;
     bool                  m_decompress;
+    bool                  m_fastpathDefault;
+    MOS_HW_RESOURCE_DEF   m_defaultMocs;
 };
 
 #endif  // #ifndef MEDIADRIVER_AGNOSTIC_COMMON_CM_CMHALGENERIC_H_

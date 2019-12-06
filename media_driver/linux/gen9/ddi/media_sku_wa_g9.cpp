@@ -356,14 +356,17 @@ static bool InitKblMediaSku(struct GfxDeviceInfo *devInfo,
     else if (devInfo->eGTType == GTTYPE_GT2)
     {
         MEDIA_WR_SKU(skuTable, FtrGT2, 1);
+        MEDIA_WR_SKU(skuTable, FtrHDR, 1);
     }
     else if (devInfo->eGTType == GTTYPE_GT3)
     {
         MEDIA_WR_SKU(skuTable, FtrGT3, 1);
+        MEDIA_WR_SKU(skuTable, FtrHDR, 1);
     }
     else if (devInfo->eGTType == GTTYPE_GT4)
     {
         MEDIA_WR_SKU(skuTable, FtrGT4, 1);
+        MEDIA_WR_SKU(skuTable, FtrHDR, 1);
     }
     else
     {
@@ -481,6 +484,8 @@ static bool InitGlkMediaSku(struct GfxDeviceInfo *devInfo,
     MEDIA_WR_SKU(skuTable, FtrVpP010Output, 1);
 
     MEDIA_WR_SKU(skuTable, FtrPerCtxtPreemptionGranularityControl, 1);
+
+    MEDIA_WR_SKU(skuTable, FtrHDR, 1);
 
     return true;
 }

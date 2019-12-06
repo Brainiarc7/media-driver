@@ -102,13 +102,23 @@ public:
     //!
     virtual MOS_STATUS ProtectDefaultCdfTableBuffer(
         void            *state,
-        uint32_t        bufIndex) = 0;
+        uint32_t        bufIndex,
+        PMOS_COMMAND_BUFFER cmdBuffer) = 0;
 
     //!
     //! \brief Return the temp cdf table buffer
     //! \return PMOS_RESOURCE
     //!
     virtual PMOS_RESOURCE GetTempCdfTableBuffer() = 0;
+
+    //!
+    //! \brief Encrypt aux buffer through partial copy
+    //! \return MOS_STATUS
+    //!         MOS_STATUS_SUCCESS if success, else fail reason
+    //!
+    virtual MOS_STATUS InitAuxSurface(
+        PMOS_RESOURCE res,
+        PMOS_COMMAND_BUFFER cmdBuffer) = 0;
 
     //!
     //! \brief  Is Dummy SteamOut Enabled

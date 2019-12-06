@@ -136,7 +136,7 @@ MOS_STATUS CM_HAL_G11_X::HwSetSurfaceMemoryObjectControl(
     // The memory object control uint16_t is composed with cache type(8:15), memory type(4:7), ages(0:3)
     mosUsage = (MOS_HW_RESOURCE_DEF)((memObjCtl & CM_MEMOBJCTL_CACHE_MASK) >> 8);
     if (mosUsage >= MOS_HW_RESOURCE_DEF_MAX)
-        mosUsage = MOS_CM_RESOURCE_USAGE_SurfaceState;
+        mosUsage = GetDefaultMOCS();
 
     surfStateParams->MemObjCtl = renderHal->pOsInterface->pfnCachePolicyGetMemoryObject(mosUsage,
         renderHal->pOsInterface->pfnGetGmmClientContext(renderHal->pOsInterface)).DwordValue;
@@ -689,7 +689,6 @@ MOS_STATUS CM_HAL_G11_X::SubmitCommands(
     }
     else
     {
-        HalOcaInterface::OnSubLevelBBStart(mosCmdBuffer, *pOsContext, &batchBuffer->OsResource, 0, true, 0);
         // Send Start batch buffer command
         CM_CHK_MOSSTATUS_GOTOFINISH(mhwMiInterface->AddMiBatchBufferStartCmd(
             &mosCmdBuffer,
@@ -725,12 +724,12 @@ MOS_STATUS CM_HAL_G11_X::SubmitCommands(
     pipeCtlParams.dwFlushMode = MHW_FLUSH_WRITE_CACHE;
     CM_CHK_MOSSTATUS_GOTOFINISH( mhwMiInterface->AddPipeControl( &mosCmdBuffer, nullptr, &pipeCtlParams ) );
 
-    if (state->svmBufferUsed)
+    if (state->svmBufferUsed || state->statelessBufferUsed)
     {
         // Find the SVM slot, patch it into this dummy pipe_control
         for (uint32_t i = 0; i < state->cmDeviceParam.maxBufferTableSize; i++ )
         {
-            //Only register SVM resource here
+            //register resource here
             if ( state->bufferTable[ i ].address )
             {
                 CM_CHK_HRESULT_GOTOFINISH_MOSERROR( osInterface->pfnRegisterResource(
@@ -739,6 +738,17 @@ MOS_STATUS CM_HAL_G11_X::SubmitCommands(
                     true,
                     false ) );
             }
+
+            // sync resource
+            MOS_SURFACE mosSurface;
+            MOS_ZeroMemory(&mosSurface, sizeof(mosSurface));
+            CM_CHK_HRESULT_GOTOFINISH_MOSERROR(osInterface->pfnGetResourceInfo(
+                osInterface,
+                &state->bufferTable[i].osResource,
+                &mosSurface));
+            mosSurface.OsResource = state->bufferTable[i].osResource;
+
+            CM_CHK_HRESULT_GOTOFINISH_MOSERROR(HalCm_SurfaceSync(state, &mosSurface, false));
         }
     }
 

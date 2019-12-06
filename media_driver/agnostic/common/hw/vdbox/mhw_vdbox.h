@@ -37,7 +37,6 @@
 #include "mos_os.h"
 #include "mhw_utilities.h"
 #include "mhw_cp_interface.h"
-#include "mhw_cmd_reader.h"
 
 #define MHW_VDBOX_VC1_BITPLANE_BUFFER_PITCH_SMALL         64
 #define MHW_VDBOX_VC1_BITPLANE_BUFFER_PITCH_LARGE         128
@@ -50,8 +49,6 @@
 
 #define MHW_VDBOX_PAK_BITSTREAM_OVERFLOW_SIZE             400
 #define MHW_VDBOX_VDENC_DYNAMIC_SLICE_WA_COUNT            1500
-
-#define MHW_VDBOX_NODE_MAX                                2
 
 // Rowstore Cache values
 #define MHW_VDBOX_PICWIDTH_1K                                                 1024
@@ -104,6 +101,7 @@ typedef enum _MHW_VDBOX_NODE_IND
 {
     MHW_VDBOX_NODE_1           = 0x0,
     MHW_VDBOX_NODE_2           = 0x1,
+    MHW_VDBOX_NODE_MAX
 } MHW_VDBOX_NODE_IND;
 
 typedef struct _MHW_VDBOX_AVC_QM_PARAMS
@@ -314,6 +312,8 @@ struct MHW_VDBOX_PIPE_BUF_ADDR_PARAMS
     PMOS_RESOURCE               presVdenc4xDsSurface[CODEC_MAX_NUM_REF_FRAME] = {};
     PMOS_RESOURCE               presVdenc8xDsSurface[CODEC_MAX_NUM_REF_FRAME] = {};
 
+    PMOS_RESOURCE               presVdencColocatedMVWriteBuffer = nullptr;                      // For AVC only
+    PMOS_RESOURCE               presVdencColocatedMVReadBuffer    = nullptr;                      // For AVC only
     PMOS_RESOURCE               presDeblockingFilterTileRowStoreScratchBuffer = nullptr;   // For HEVC, VP9
     PMOS_RESOURCE               presDeblockingFilterColumnRowStoreScratchBuffer = nullptr; // For HEVC, VP9
     PMOS_RESOURCE               presMetadataLineBuffer = nullptr;                          // For HEVC, VP9
@@ -428,6 +428,7 @@ struct MHW_VDBOX_AVC_IMG_PARAMS
     uint8_t                                *pVDEncModeCost = nullptr;
     uint8_t                                *pVDEncMvCost = nullptr;
     uint8_t                                *pVDEncHmeMvCost = nullptr;
+    uint32_t                               biWeight = 0;
     virtual ~MHW_VDBOX_AVC_IMG_PARAMS(){}
 };
 using PMHW_VDBOX_AVC_IMG_PARAMS = MHW_VDBOX_AVC_IMG_PARAMS * ;

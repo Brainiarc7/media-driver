@@ -157,7 +157,6 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_SetSrc1SamplerLumaKey, LumaKey_Source                 , Kdll_None },
     { RID_SetSrc1Procamp   , Procamp_Source                     , Kdll_None },
     { RID_SetSrc1Processing, Process_Source                     , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_None                      , Kdll_None },
     { RID_SetParserState   , Parser_SampleLayer1                , Kdll_None },
 
     // Setup Parameters for Render Target
@@ -719,6 +718,7 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     // AVS Interlace Scaling
     { RID_Op_NewEntry      , RULE_DEFAULT                        , Kdll_None },
     { RID_IsParserState    , Parser_SampleLayer0                 , Kdll_None },
+    { RID_IsSrc0Format     , Format_AYUV                         , Kdll_Or   },
     { RID_IsSrc0Format     , Format_NV12                         , Kdll_Or   },
     { RID_IsSrc0Format     , Format_PA                           , Kdll_Or   },
     { RID_IsSrc0Format     , Format_YV12                         , Kdll_Or   },
@@ -1300,143 +1300,96 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
 
     // Sample Layer 0 Done
 
-    // Src0 Sampling is complete -> SrcBlend + Luma key + colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done                , Kdll_None },
-    { RID_IsSrc0Processing , Process_SBlend                         , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                         , Kdll_None },
-    { RID_IsSrc0LumaKey    , LumaKey_True                           , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Compute_Lumakey_Buf0123         , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_SrcBlend   , Kdll_None },
-    { RID_SetSrc0Processing, Process_None                           , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                        , Kdll_None },
-    { RID_SetSrc0LumaKey   , LumaKey_False                          , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                            , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                            , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                    , Kdll_None },
+    // Src0 Sampling is complete -> Luma key + CSC
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                        , Kdll_None },
+    { RID_IsParserState    , Parser_SampleLayer0Done                 , Kdll_None },
+    { RID_IsSrc0LumaKey    , LumaKey_True                            , Kdll_None },
+    { RID_IsSrc0Coeff      , CoeffID_Any                             , Kdll_None },
+    { RID_SetKernel        , IDR_VP_Compute_Lumakey_Buf0123          , Kdll_None },
+    { RID_SetSrc0LumaKey   , LumaKey_False                           , Kdll_None },
+    { RID_SetSrc0Sampling  , Sample_None                             , Kdll_None },
+    { RID_SetSrc0Format    , Format_None                             , Kdll_None },
+    { RID_SetParserState   , Parser_SetupCSC0                        , Kdll_None },
 
-    // Src0 Sampling is complete -> SrcBlend + colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done                , Kdll_None },
-    { RID_IsSrc0Processing , Process_SBlend                         , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                         , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_SrcBlend   , Kdll_None },
-    { RID_SetSrc0Processing, Process_None                           , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                        , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                            , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                            , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                    , Kdll_None },
+    // Src0 Sampling is complete -> Luma key + Colorfill
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                        , Kdll_None },
+    { RID_IsParserState    , Parser_SampleLayer0Done                 , Kdll_None },
+    { RID_IsSrc0LumaKey    , LumaKey_True                            , Kdll_None },
+    { RID_IsSrc0ColorFill  , ColorFill_True                          , Kdll_None },
+    { RID_SetKernel        , IDR_VP_Compute_Lumakey_Buf0123          , Kdll_None },
+    { RID_SetSrc0LumaKey   , LumaKey_False                           , Kdll_None },
+    { RID_SetSrc0Sampling  , Sample_None                             , Kdll_None },
+    { RID_SetSrc0Format    , Format_None                             , Kdll_None },
+    { RID_SetParserState   , Parser_Colorfill                        , Kdll_None },
 
-    // Src0 Sampling is complete -> ConstBlend + Luma key + colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done                , Kdll_None },
-    { RID_IsSrc0Processing , Process_CBlend                         , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                         , Kdll_None },
-    { RID_IsSrc0LumaKey    , LumaKey_True                           , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Compute_Lumakey_Buf0123         , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_ConstBlend , Kdll_None },
-    { RID_SetSrc0Processing, Process_None                           , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                        , Kdll_None },
-    { RID_SetSrc0LumaKey   , LumaKey_False                          , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                            , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                            , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                    , Kdll_None },
 
-    // Src0 Sampling is complete -> ConstBlend + colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done                , Kdll_None },
-    { RID_IsSrc0Processing , Process_CBlend                         , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                         , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_ConstBlend , Kdll_None },
-    { RID_SetSrc0Processing, Process_None                           , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                        , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                            , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                            , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                    , Kdll_None },
+    // Src0 Sampling is complete -> CSC
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                        , Kdll_None },
+    { RID_IsParserState    , Parser_SampleLayer0Done                 , Kdll_None },
+    { RID_IsSrc0Coeff      , CoeffID_Any                             , Kdll_None },
+    { RID_SetSrc0Sampling  , Sample_None                             , Kdll_None },
+    { RID_SetSrc0Format    , Format_None                             , Kdll_None },
+    { RID_SetParserState   , Parser_SetupCSC0                        , Kdll_None },
 
-    // Src0 Sampling is complete -> ConstSrcBlend + Luma key + colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                           , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done                    , Kdll_None },
-    { RID_IsSrc0Processing , Process_CSBlend                            , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                             , Kdll_None },
-    { RID_IsSrc0LumaKey    , LumaKey_True                               , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Compute_Lumakey_Buf0123             , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_ConstSrcBlend  , Kdll_None },
-    { RID_SetSrc0Processing, Process_None                               , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                            , Kdll_None },
-    { RID_SetSrc0LumaKey   , LumaKey_False                              , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                                , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                                , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                        , Kdll_None },
+    // Src0 Sampling is complete -> Colorfill
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                        , Kdll_None },
+    { RID_IsParserState    , Parser_SampleLayer0Done                 , Kdll_None },
+    { RID_IsSrc0ColorFill  , ColorFill_True                          , Kdll_None },
+    { RID_SetSrc0Sampling  , Sample_None                             , Kdll_None },
+    { RID_SetSrc0Format    , Format_None                             , Kdll_None },
+    { RID_SetParserState   , Parser_Colorfill                        , Kdll_None },
 
-    // Src0 Sampling is complete -> ConstSrcBlend + colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                           , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done                    , Kdll_None },
-    { RID_IsSrc0Processing , Process_CSBlend                            , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                             , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_ConstSrcBlend  , Kdll_None },
-    { RID_SetSrc0Processing, Process_None                               , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                            , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                                , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                                , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                        , Kdll_None },
+    // Src0 Sampling is complete -> no CSC or Colorfill
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                        , Kdll_None },
+    { RID_IsParserState    , Parser_SampleLayer0Done                 , Kdll_None },
+    { RID_SetSrc0Sampling  , Sample_None                             , Kdll_None },
+    { RID_SetSrc0Format    , Format_None                             , Kdll_None },
+    { RID_SetParserState   , Parser_SampleLayer1                     , Kdll_None },
 
-    // Src0 Sampling is complete -> PartBlend + Luma key + colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done                , Kdll_None },
-    { RID_IsSrc0Processing , Process_PBlend                         , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                         , Kdll_None },
-    { RID_IsSrc0LumaKey    , LumaKey_True                           , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Compute_Lumakey_Buf0123         , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_PartBlend  , Kdll_None },
-    { RID_SetSrc0Processing, Process_None                           , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                        , Kdll_None },
-    { RID_SetSrc0LumaKey   , LumaKey_False                          , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                            , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                            , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                    , Kdll_None },
 
-    // Src0 Sampling is complete -> PartBlend + colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done                , Kdll_None },
-    { RID_IsSrc0Processing , Process_PBlend                         , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                         , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_PartBlend  , Kdll_None },
-    { RID_SetSrc0Processing, Process_None                           , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                        , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                            , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                            , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                    , Kdll_None },
 
-    // Src0 Sampling is complete, no AVS -> Luma key + colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                   , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done            , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                     , Kdll_None },
-    { RID_IsSrc0LumaKey    , LumaKey_True                       , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Compute_Lumakey_Buf0123     , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16        , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                    , Kdll_None },
-    { RID_SetSrc0LumaKey   , LumaKey_False                      , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                        , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                        , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                , Kdll_None },
+    // SrcBlend + colorfill
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                        , Kdll_None },
+    { RID_IsParserState    , Parser_Colorfill                        , Kdll_None },
+    { RID_IsSrc0Processing , Process_SBlend                          , Kdll_None },
+    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_SrcBlend    , Kdll_None },
+    { RID_SetSrc0Processing, Process_None                            , Kdll_None },
+    { RID_SetSrc0ColorFill , ColorFill_False                         , Kdll_None },
+    { RID_SetParserState   , Parser_SampleLayer1                     , Kdll_None },
 
-    // Src0 Sampling is complete, no AVS -> colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                   , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done            , Kdll_None },
-    { RID_IsSrc0ColorFill  , ColorFill_True                     , Kdll_None },
-    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16        , Kdll_None },
-    { RID_SetSrc0ColorFill , ColorFill_False                    , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                        , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                        , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                , Kdll_None },
+    // ConstBlend + colorfill
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                        , Kdll_None },
+    { RID_IsParserState    , Parser_Colorfill                        , Kdll_None },
+    { RID_IsSrc0Processing , Process_CBlend                          , Kdll_None },
+    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_ConstBlend  , Kdll_None },
+    { RID_SetSrc0Processing, Process_None                            , Kdll_None },
+    { RID_SetSrc0ColorFill , ColorFill_False                         , Kdll_None },
+    { RID_SetParserState   , Parser_SampleLayer1                     , Kdll_None },
 
-    // Src0 Sampling is complete -> no Luma key or colorfill
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                   , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer0Done            , Kdll_None },
-    { RID_SetSrc0Sampling  , Sample_None                        , Kdll_None },
-    { RID_SetSrc0Format    , Format_None                        , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1                , Kdll_None },
+    // ConstSrcBlend + colorfill
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                            , Kdll_None },
+    { RID_IsParserState    , Parser_Colorfill                            , Kdll_None },
+    { RID_IsSrc0Processing , Process_CSBlend                             , Kdll_None },
+    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_ConstSrcBlend   , Kdll_None },
+    { RID_SetSrc0Processing, Process_None                                , Kdll_None },
+    { RID_SetSrc0ColorFill , ColorFill_False                             , Kdll_None },
+    { RID_SetParserState   , Parser_SampleLayer1                         , Kdll_None },
+
+    // PartBlend + colorfill
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                        , Kdll_None },
+    { RID_IsParserState    , Parser_Colorfill                        , Kdll_None },
+    { RID_IsSrc0Processing , Process_PBlend                          , Kdll_None },
+    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16_PartBlend   , Kdll_None },
+    { RID_SetSrc0Processing, Process_None                            , Kdll_None },
+    { RID_SetSrc0ColorFill , ColorFill_False                         , Kdll_None },
+    { RID_SetParserState   , Parser_SampleLayer1                     , Kdll_None },
+
+    // no AVS -> colorfill
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                    , Kdll_None },
+    { RID_IsParserState    , Parser_Colorfill                    , Kdll_None },
+    { RID_SetKernel        , IDR_VP_Colorfill_444Scale16         , Kdll_None },
+    { RID_SetSrc0ColorFill , ColorFill_False                     , Kdll_None },
+    { RID_SetParserState   , Parser_SampleLayer1                 , Kdll_None },
 
     // Sample Layer 1
 
@@ -1776,55 +1729,19 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_SetKernel        , IDR_VP_PL3_444Scale16_Buf_5        , Kdll_None },
     { RID_SetParserState   , Parser_SetupCSC1                   , Kdll_None },
 
-    // Sample 0.34x RGB -> Src1
+    // Sample 0.34x -> Src1
     { RID_Op_NewEntry      , RULE_DEFAULT                       , Kdll_None },
     { RID_IsParserState    , Parser_SampleLayer1                , Kdll_None },
-    { RID_IsSrc1Format     , Format_RGB                         , Kdll_None },
-    { RID_IsSrc1Sampling   , Sample_Scaling_034x                , Kdll_None },
-    { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_4        , Kdll_None },
-    { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_5        , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_A8R8G8B8                  , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1Done            , Kdll_None },
-
-    // Sample 0.34x AYUV -> Src1
-    { RID_Op_NewEntry      , RULE_DEFAULT                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer1                , Kdll_None },
-    { RID_IsSrc1Format     , Format_AYUV                        , Kdll_None },
-    { RID_IsSrc1Sampling   , Sample_Scaling_034x                , Kdll_None },
-    { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_4        , Kdll_None },
-    { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_5        , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_V8U8Y8A8                  , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1Done            , Kdll_None },
-
-    // Sample 0.34x Packed YUV -> Src1
-    { RID_Op_NewEntry      , RULE_DEFAULT                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer1                , Kdll_None },
-    { RID_IsSrc1Format     , Format_PA                          , Kdll_None },
-    { RID_IsSrc1Sampling   , Sample_Scaling_034x                , Kdll_None },
-    { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_4        , Kdll_None },
-    { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_5        , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_V8Y8U8A8                  , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1Done            , Kdll_None },
-
-    // Sample 0.34x YV12 Planar -> Src1
-    { RID_Op_NewEntry      , RULE_DEFAULT                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer1                , Kdll_None },
-    { RID_IsSrc1Format     , Format_YV12_Planar                 , Kdll_None },
-    { RID_IsSrc1Sampling   , Sample_Scaling_034x                , Kdll_None },
-    { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_4        , Kdll_None },
-    { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_5        , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1Done            , Kdll_None },
-
-    // Sample 0.34x PL2 -> Src1
-    { RID_Op_NewEntry      , RULE_DEFAULT                       , Kdll_None },
-    { RID_IsParserState    , Parser_SampleLayer1                , Kdll_None },
+    { RID_IsSrc1Format     , Format_RGB                         , Kdll_Or   },
+    { RID_IsSrc1Format     , Format_AYUV                        , Kdll_Or   },
+    { RID_IsSrc1Format     , Format_PA                          , Kdll_Or   },
+    { RID_IsSrc1Format     , Format_YV12_Planar                 , Kdll_Or   },
     { RID_IsSrc1Format     , Format_NV12                        , Kdll_Or   },
     { RID_IsSrc1Format     , Format_400P                        , Kdll_None },
     { RID_IsSrc1Sampling   , Sample_Scaling_034x                , Kdll_None },
     { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_4        , Kdll_None },
     { RID_SetKernel        , IDR_VP_PA_444DScale16_Buf_5        , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_PL2                       , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1Done            , Kdll_None },
+    { RID_SetParserState   , Parser_SetupCSC1                   , Kdll_None },
 
     // Sample 0.34x PL2(width or height is not a multiple of 4) -> Src1
     { RID_Op_NewEntry      , RULE_DEFAULT                       , Kdll_None },
@@ -1834,8 +1751,7 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_IsSrc1Sampling   , Sample_Scaling_034x                , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444DScale16_Buf_4       , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444DScale16_Buf_5       , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_PL2                       , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1Done            , Kdll_None },
+    { RID_SetParserState   , Parser_SetupCSC1                   , Kdll_None },
 
     // Sample 0.34x PL3 -> Src1
     { RID_Op_NewEntry      , RULE_DEFAULT                       , Kdll_None },
@@ -1845,8 +1761,7 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_IsSrc1Sampling   , Sample_Scaling_034x                , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL3_444DScale16_Buf_4       , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL3_444DScale16_Buf_5       , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_PL3                       , Kdll_None },
-    { RID_SetParserState   , Parser_SampleLayer1Done            , Kdll_None },
+    { RID_SetParserState   , Parser_SetupCSC1                   , Kdll_None },
 
     // AVS Sample (RGB | AYUV | Packed YUV | YV12 | NV12 | 400P) -> Src1
 
@@ -1988,7 +1903,6 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_IsLayerRotation  , VPHAL_ROTATION_90                  , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444AVS16_Buf_4_Rot_90   , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444AVS16_Buf_5_Rot_90   , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_V8Y8U8A8                  , Kdll_None },
     { RID_SetParserState   , Parser_SetupCSC1                   , Kdll_None },
 
     // Rotate 180 degrees
@@ -2000,7 +1914,6 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_IsLayerRotation  , VPHAL_ROTATION_180                 , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444AVS16_Buf_4_Rot_180  , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444AVS16_Buf_5_Rot_180  , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_V8Y8U8A8                  , Kdll_None },
     { RID_SetParserState   , Parser_SetupCSC1                   , Kdll_None },
 
     // Rotate 270 degrees
@@ -2012,7 +1925,6 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_IsLayerRotation  , VPHAL_ROTATION_270                 , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444AVS16_Buf_4_Rot_270  , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444AVS16_Buf_5_Rot_270  , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_V8Y8U8A8                  , Kdll_None },
     { RID_SetParserState   , Parser_SetupCSC1                   , Kdll_None },
 
     // Mirror Horizontal
@@ -2075,7 +1987,6 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_IsSrc1Sampling   , Sample_Scaling_AVS                 , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444AVS16_Buf_4          , Kdll_None },
     { RID_SetKernel        , IDR_VP_PL2_444AVS16_Buf_5          , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_V8Y8U8A8                  , Kdll_None },
     { RID_SetParserState   , Parser_SetupCSC1                   , Kdll_None },
 
     // AVS Sample (PL3 | PL3_RGB) -> Src1
@@ -2394,10 +2305,17 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_SetNextLayer     , -2                                 , Kdll_None }, // jump back to main layer
     { RID_SetParserState   , Parser_SampleLayer0Mix             , Kdll_None },
 
-    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                   , Kdll_None },
-    { RID_IsParserState    , Parser_ExecuteCSC0Done             , Kdll_None },
-    { RID_SetSrc0Coeff     , CoeffID_None                       , Kdll_None },
-    { RID_SetParserState   , Parser_SetupCSC1                   , Kdll_None },
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                    , Kdll_None },
+    { RID_IsParserState    , Parser_ExecuteCSC0Done              , Kdll_None },
+    { RID_IsSrc0ColorFill  , ColorFill_True                      , Kdll_None },
+    { RID_SetSrc0Coeff     , CoeffID_None                        , Kdll_None },
+    { RID_SetParserState   , Parser_Colorfill                    , Kdll_None },
+
+    { RID_Op_NewEntry      , RULE_NO_OVERRIDE                    , Kdll_None },
+    { RID_IsParserState    , Parser_ExecuteCSC0Done              , Kdll_None },
+    { RID_SetSrc0Coeff     , CoeffID_None                        , Kdll_None },
+    { RID_SetParserState   , Parser_SampleLayer1                 , Kdll_None },
+
 
     // Perform CSC operation for layer 1
 
@@ -2652,7 +2570,6 @@ extern const Kdll_RuleEntry g_KdllRuleTable_g10[] =
     { RID_IsQuadrant       , 2                                  , Kdll_None },
     { RID_SetSrc1Sampling  , Sample_None                        , Kdll_None },
     { RID_SetSrc1Format    , Format_None                        , Kdll_None },
-    { RID_SetSrc1Internal  , Internal_None                      , Kdll_None },
     { RID_SetSrc1Processing, Process_None                       , Kdll_None },
     { RID_SetNextLayer     , 0                                  , Kdll_None },
     { RID_SetQuadrant      , 0                                  , Kdll_None },

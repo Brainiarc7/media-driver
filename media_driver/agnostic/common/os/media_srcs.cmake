@@ -45,11 +45,13 @@ set(TMP_HEADERS_
     ${CMAKE_CURRENT_LIST_DIR}/mos_util_user_feature_keys.h
     ${CMAKE_CURRENT_LIST_DIR}/mos_util_user_interface.h
     ${CMAKE_CURRENT_LIST_DIR}/mos_utilities.h
+    ${CMAKE_CURRENT_LIST_DIR}/mos_utilities_common.h
     ${CMAKE_CURRENT_LIST_DIR}/mos_gpucontext.h
     ${CMAKE_CURRENT_LIST_DIR}/mos_gpucontextmgr.h
     ${CMAKE_CURRENT_LIST_DIR}/mos_cmdbufmgr.h
     ${CMAKE_CURRENT_LIST_DIR}/mos_commandbuffer.h
     ${CMAKE_CURRENT_LIST_DIR}/mos_oca_interface.h
+    ${CMAKE_CURRENT_LIST_DIR}/mos_interface.h
 )
 
 set(SOURCES_

@@ -97,6 +97,7 @@ GMM_RESOURCE_FORMAT GraphicsResourceSpecific::ConvertMosFmtToGmmFmt(MOS_FORMAT f
         case Format_BGRP        : return GMM_FORMAT_BGRP_TYPE;
         case Format_R8U         : return GMM_FORMAT_R8_UINT_TYPE;
         case Format_R16U        : return GMM_FORMAT_R16_UINT_TYPE;
+        case Format_R16F        : return GMM_FORMAT_R16_FLOAT_TYPE;
         case Format_P010        : return GMM_FORMAT_P010_TYPE;
         case Format_P016        : return GMM_FORMAT_P016_TYPE;
         case Format_Y216        : return GMM_FORMAT_Y216_TYPE;
@@ -184,9 +185,9 @@ MOS_STATUS GraphicsResourceSpecific::Allocate(OsContext* osContextPtr, CreatePar
     switch (tileformat)
     {
         case MOS_TILE_Y:
-            gmmParams.Flags.Gpu.MMC       = params.m_isCompressed;
+            gmmParams.Flags.Gpu.MMC       = params.m_isCompressible;
             tileFormatLinux               = I915_TILING_Y;
-            if (params.m_isCompressed && pOsContextSpecific->GetAuxTableMgr())
+            if (params.m_isCompressible && pOsContextSpecific->GetAuxTableMgr())
             {
                 gmmParams.Flags.Info.MediaCompressed = 1;
                 gmmParams.Flags.Gpu.CCS = 1;
@@ -321,16 +322,6 @@ MOS_STATUS GraphicsResourceSpecific::Allocate(OsContext* osContextPtr, CreatePar
         m_compressionMode = (MOS_RESOURCE_MMC_MODE)gmmResourceInfoPtr->GetMmcMode(0);
 
         MOS_OS_VERBOSEMESSAGE("Alloc %7d bytes (%d x %d resource).",bufSize, params.m_width, bufHeight);
-
-        AuxTableMgr* auxTableMgr = pOsContextSpecific->GetAuxTableMgr();
-
-        if(auxTableMgr)
-        {
-            if (auxTableMgr->MapResource(gmmResourceInfoPtr, boPtr) != MOS_STATUS_SUCCESS)
-            {
-                MOS_OS_ASSERTMESSAGE("Map aux resource failed");
-            }
-        }
     }
     else
     {
@@ -442,9 +433,12 @@ void* GraphicsResourceSpecific::Lock(OsContext* osContextPtr, LockParams& params
     {
         // Do decompression for a compressed surface before lock
         const auto pGmmResInfo = m_gmmResInfo;
-         MOS_OS_ASSERT(pGmmResInfo);
+        MOS_OS_ASSERT(pGmmResInfo);
+        GMM_RESOURCE_FLAG GmmFlags = pGmmResInfo->GetResFlags();
+        
         if (!params.m_noDecompress &&
-             pGmmResInfo->IsMediaMemoryCompressed(0))
+            (((GmmFlags.Gpu.MMC || GmmFlags.Gpu.CCS) && GmmFlags.Info.MediaCompressed) ||
+             pGmmResInfo->IsMediaMemoryCompressed(0)))
         {
             if ((pOsContextSpecific->m_mediaMemDecompState == nullptr) ||
                 (pOsContextSpecific->m_memoryDecompress    == nullptr))

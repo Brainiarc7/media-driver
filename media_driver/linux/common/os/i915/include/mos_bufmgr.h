@@ -184,6 +184,7 @@ int mos_bo_madvise(struct mos_linux_bo *bo, int madv);
 int mos_bo_use_48b_address_range(struct mos_linux_bo *bo, uint32_t enable);
 void mos_bo_set_exec_object_async(struct mos_linux_bo *bo);
 int mos_bo_set_softpin_offset(struct mos_linux_bo *bo, uint64_t offset);
+int mos_bo_set_softpin(struct mos_linux_bo *bo);
 
 int mos_bo_disable_reuse(struct mos_linux_bo *bo);
 int mos_bo_is_reusable(struct mos_linux_bo *bo);
@@ -368,6 +369,8 @@ drm_export int map_gtt(struct mos_linux_bo *bo);
 drm_export int mos_gem_bo_unmap(struct mos_linux_bo *bo);
 drm_export int mos_gem_bo_subdata(struct mos_linux_bo *bo, unsigned long offset,
              unsigned long size, const void *data);
+
+drm_export bool mos_gem_bo_is_softpin(struct mos_linux_bo *bo);
 #if defined(__cplusplus)
 }
 #endif

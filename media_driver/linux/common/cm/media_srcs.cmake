@@ -21,6 +21,7 @@
 set(TMP_SOURCES_
     ${CMAKE_CURRENT_LIST_DIR}/cm_device_rt.cpp
     ${CMAKE_CURRENT_LIST_DIR}/cm_event_rt_os.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/cm_queue_rt_os.cpp
     ${CMAKE_CURRENT_LIST_DIR}/cm_ftrace.cpp
     ${CMAKE_CURRENT_LIST_DIR}/cm_hal_os.cpp
     ${CMAKE_CURRENT_LIST_DIR}/cm_surface_2d_rt.cpp
@@ -31,6 +32,10 @@ set(TMP_SOURCES_
     ${CMAKE_CURRENT_LIST_DIR}/cm_global_api_os.cpp
     ${CMAKE_CURRENT_LIST_DIR}/media_libva_cm.c
     ${CMAKE_CURRENT_LIST_DIR}/cm_debug_os.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/cm_ish.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/cm_surface_state_manager_os.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/cm_event_ex.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/cm_command_buffer_os.cpp
 )
 
 set(TMP_HEADERS_
@@ -46,6 +51,8 @@ set(TMP_HEADERS_
     ${CMAKE_CURRENT_LIST_DIR}/cm_surface_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/cm_wrapper_os.h
     ${CMAKE_CURRENT_LIST_DIR}/media_libva_cm.h
+    ${CMAKE_CURRENT_LIST_DIR}/cm_ish.h
+    ${CMAKE_CURRENT_LIST_DIR}/cm_event_ex.h
 )
 
 set(SOURCES_

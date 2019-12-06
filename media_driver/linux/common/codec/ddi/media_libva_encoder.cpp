@@ -288,6 +288,8 @@ VAStatus DdiEncode_CreateContext(
     mosCtx.m_auxTableMgr         = mediaDrvCtx->m_auxTableMgr;
     mosCtx.pGmmClientContext     = mediaDrvCtx->pGmmClientContext;
 
+    mosCtx.m_osDeviceContext     = mediaDrvCtx->m_osDeviceContext;
+
     if (nullptr == mosCtx.pPerfData)
     {
         vaStatus = VA_STATUS_ERROR_ALLOCATION_FAILED;
@@ -368,6 +370,7 @@ VAStatus DdiEncode_CreateContext(
         return vaStatus;
     }
 
+    encCtx->m_encode->m_codechalSettings->enableCodecMmc = false;
     MOS_STATUS eStatus = pCodecHal->Allocate(encCtx->m_encode->m_codechalSettings);
 
 #ifdef _MMC_SUPPORTED
@@ -661,6 +664,8 @@ VAStatus DdiEncode_MfeSubmit(
     encodeMfeContext->mfeEncodeSharedState->vmeSurface     = vmeSurface;
     encodeMfeContext->mfeEncodeSharedState->commonSurface  = commonSurface;
 
+    encodeMfeContext->mfeEncodeSharedState->encoders.clear();
+
     // Call Enc functions for all the sub contexts
     MOS_STATUS status = MOS_STATUS_SUCCESS;
     for (int32_t i = 0; i < validContextNumber; i++)
@@ -676,6 +681,8 @@ VAStatus DdiEncode_MfeSubmit(
         }
 
         CodechalEncoderState *encoder = dynamic_cast<CodechalEncoderState *>(encodeContext->pCodecHal);
+
+        encodeMfeContext->mfeEncodeSharedState->encoders.push_back(encoder);
 
         status = encoder->Execute(&encodeContext->EncodeParams);
         if (MOS_STATUS_SUCCESS != status)

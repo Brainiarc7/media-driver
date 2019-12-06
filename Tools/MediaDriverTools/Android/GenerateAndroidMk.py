@@ -119,8 +119,8 @@ class Generator:
         return "cmake " + self.src
 
     def generateMakefile(self, debug=False):
-        #windows can help us debug the script
-        #but we do not want generate makefile on widnows
+        #Win env can help us debug the script
+        #but we do not want generate makefile on Win-system
         if os.name == "nt":
             return
         verbose = ";" if debug else "> /dev/null 2>&1;"
@@ -176,7 +176,7 @@ class GmmGeneator(Generator):
     def getMakefile(self):
         return "Source/GmmLib/Makefile"
     def getFlagsfile(self):
-        return "Source/GmmLib/CMakeFiles/gmm_umd.dir/flags.make"
+        return "Source/GmmLib/CMakeFiles/igfx_gmmumd_dll.dir/flags.make"
 
     def adjustSources(self, lines):
         for i, l in enumerate(lines):

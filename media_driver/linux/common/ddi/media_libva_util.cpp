@@ -354,6 +354,12 @@ VAStatus DdiMediaUtil_AllocateSurface(
                 gmmParams.BaseHeight = mediaSurface->pSurfDesc->uiSize / mediaSurface->pSurfDesc->uiPitches[0];
             }
         }
+        if(mediaSurface->pSurfDesc->uiVaMemType == VA_SURFACE_ATTRIB_MEM_TYPE_USER_PTR)
+        {
+            gmmParams.ExistingSysMemSize = mediaSurface->pSurfDesc->uiBuffserSize;
+            gmmParams.pExistingSysMem    = mediaSurface->pSurfDesc->ulBuffer;
+            gmmParams.Flags.Info.ExistingSysMem = true;
+        }
     }
     else
     {
@@ -375,13 +381,23 @@ VAStatus DdiMediaUtil_AllocateSurface(
         case I915_TILING_Y:
             // Disable MMC for application required surfaces, because some cases' output streams have corruption.
             gmmParams.Flags.Gpu.MMC    = false;
-            if ( mediaDrvCtx->m_auxTableMgr )
+
+            if (mediaDrvCtx->m_auxTableMgr)
             {
                 gmmParams.Flags.Gpu.MMC = true;
                 gmmParams.Flags.Info.MediaCompressed = 1;
                 gmmParams.Flags.Gpu.CCS = 1;
-                gmmParams.Flags.Gpu.UnifiedAuxSurface = 1;
                 gmmParams.Flags.Gpu.RenderTarget = 1;
+                gmmParams.Flags.Gpu.UnifiedAuxSurface = 1;
+            }
+            else if (MEDIA_IS_SKU(&mediaDrvCtx->SkuTable, FtrE2ECompression) &&
+                     MEDIA_IS_SKU(&mediaDrvCtx->SkuTable, FtrFlatPhysCCS))
+            {
+                gmmParams.Flags.Gpu.MMC = true;
+                gmmParams.Flags.Info.MediaCompressed = 1;
+                gmmParams.Flags.Gpu.CCS = 1;
+                gmmParams.Flags.Gpu.RenderTarget = 1;
+                gmmParams.Flags.Gpu.UnifiedAuxSurface = 0;
             }
             break;
         case I915_TILING_X:
@@ -405,6 +421,12 @@ VAStatus DdiMediaUtil_AllocateSurface(
     uint32_t    gmmPitch;
     uint32_t    gmmSize;
     uint32_t    gmmHeight;
+
+    gmmPitch    = (uint32_t)gmmResourceInfo->GetRenderPitch();
+    if( DdiMediaUtil_IsExternalSurface(mediaSurface) && ( mediaSurface->pSurfDesc->uiVaMemType == VA_SURFACE_ATTRIB_MEM_TYPE_USER_PTR ) && mediaSurface->pSurfDesc->uiPitches[0])
+    {
+        gmmResourceInfo->OverridePitch(mediaSurface->pSurfDesc->uiPitches[0]);
+    }
     gmmPitch    = (uint32_t)gmmResourceInfo->GetRenderPitch();
     gmmSize     = (uint32_t)gmmResourceInfo->GetSizeSurface();
     gmmHeight   = gmmResourceInfo->GetBaseHeight();
@@ -486,17 +508,6 @@ VAStatus DdiMediaUtil_AllocateSurface(
     {
         DDI_ASSERTMESSAGE("Fail to Alloc %7d bytes (%d x %d resource).",gmmSize, width, height);
         hRes = VA_STATUS_ERROR_ALLOCATION_FAILED;
-        goto finish;
-    }
-
-    if (mediaDrvCtx->m_auxTableMgr)
-    {
-        if(mediaDrvCtx->m_auxTableMgr->MapResource(gmmResourceInfo, bo) != MOS_STATUS_SUCCESS)
-        {
-            DDI_ASSERTMESSAGE("Aux table map failed.");
-            hRes = VA_STATUS_ERROR_ALLOCATION_FAILED;
-            goto finish;
-        }
     }
 
 finish:

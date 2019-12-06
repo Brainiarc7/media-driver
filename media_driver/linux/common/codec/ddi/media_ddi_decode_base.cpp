@@ -221,6 +221,7 @@ VAStatus DdiMediaDecode::BeginPicture(
     m_ddiDecodeCtx->DecodeParams.m_numSlices       = 0;
     m_ddiDecodeCtx->DecodeParams.m_dataSize        = 0;
     m_ddiDecodeCtx->DecodeParams.m_deblockDataSize = 0;
+    m_ddiDecodeCtx->DecodeParams.m_executeCallIndex = 0;
     m_groupIndex                                   = 0;
 
     // register render targets
@@ -714,6 +715,61 @@ VAStatus DdiMediaDecode::ExtraDownScaling(
     return MOS_STATUS_SUCCESS;
 }
 
+VAStatus DdiMediaDecode::InitDummyReference(CodechalDecode& decoder)
+{
+    PMOS_SURFACE dummyReference = decoder.GetDummyReference();
+
+    // If dummy reference is from decode output surface, need to update frame by frame
+    if (decoder.GetDummyReferenceStatus() == CODECHAL_DUMMY_REFERENCE_DEST_SURFACE)
+    {
+        MOS_ZeroMemory(dummyReference, sizeof(MOS_SURFACE));
+        decoder.SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_INVALID);
+    }
+
+    if (!Mos_ResourceIsNull(&dummyReference->OsResource))
+    {
+        Mos_Specific_GetResourceInfo(decoder.GetOsInterface(), &dummyReference->OsResource, dummyReference);
+
+        // Check if need to re-get dummy reference from DPB or re-allocated
+        if (dummyReference->dwWidth < m_ddiDecodeCtx->DecodeParams.m_destSurface->dwWidth ||
+            dummyReference->dwHeight < m_ddiDecodeCtx->DecodeParams.m_destSurface->dwHeight)
+        {
+            // Check if the dummy reference needs to be re-allocated
+            if (decoder.GetDummyReferenceStatus() == CODECHAL_DUMMY_REFERENCE_ALLOCATED)
+            {
+                decoder.GetOsInterface()->pfnFreeResource(decoder.GetOsInterface(), &dummyReference->OsResource);
+            }
+
+            // Reset dummy reference
+            MOS_ZeroMemory(dummyReference, sizeof(MOS_SURFACE));
+            decoder.SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_INVALID);
+
+            // Considering potential risk, disable the dummy reference from DPB path temporarily
+            //GetDummyReferenceFromDPB(m_ddiDecodeCtx);
+
+            //if (!Mos_ResourceIsNull(&dummyReference->OsResource))
+            //{
+            //    decoder->SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_DPB);
+            //}
+        }
+    }
+    else
+    {
+        // Init dummy reference
+        MOS_ZeroMemory(dummyReference, sizeof(MOS_SURFACE));
+        decoder.SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_INVALID);
+
+        // Considering potential risk, disable the dummy reference from DPB path temporarily
+        //GetDummyReferenceFromDPB(m_ddiDecodeCtx);
+        //if (!Mos_ResourceIsNull(&dummyReference->OsResource))
+        //{
+        //    decoder->SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_DPB);
+        //}
+    }
+
+    return VA_STATUS_SUCCESS;
+}
+
 VAStatus DdiMediaDecode::EndPicture(
     VADriverContextP ctx,
     VAContextID      context)
@@ -737,61 +793,14 @@ VAStatus DdiMediaDecode::EndPicture(
 
     if (MEDIA_IS_WA(&m_ddiDecodeCtx->pMediaCtx->WaTable, WaDummyReference))
     {
-        CodechalDecode *decoder = dynamic_cast<CodechalDecode *>(m_ddiDecodeCtx->pCodecHal);
-        PMOS_SURFACE dummyReference = decoder->GetDummyReference();
-
-        // If dummy reference is from decode output surface, need to update frame by frame
-        if (decoder->GetDummyReferenceStatus() == CODECHAL_DUMMY_REFERENCE_DEST_SURFACE)
-        {
-            MOS_ZeroMemory(dummyReference, sizeof(MOS_SURFACE));
-            decoder->SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_INVALID);
-        }
-
         Mos_Specific_GetResourceInfo(
             m_ddiDecodeCtx->pCodecHal->GetOsInterface(), 
             &m_ddiDecodeCtx->DecodeParams.m_destSurface->OsResource,
             m_ddiDecodeCtx->DecodeParams.m_destSurface);
 
-        if (!Mos_ResourceIsNull(&dummyReference->OsResource))
-        {
-            Mos_Specific_GetResourceInfo(decoder->GetOsInterface(), &dummyReference->OsResource, dummyReference);
-
-            // Check if need to re-get dummy reference from DPB or re-allocated
-            if (dummyReference->dwWidth < m_ddiDecodeCtx->DecodeParams.m_destSurface->dwWidth ||
-                dummyReference->dwHeight < m_ddiDecodeCtx->DecodeParams.m_destSurface->dwHeight)
-            {
-                // Check if the dummy reference needs to be re-allocated
-                if (decoder->GetDummyReferenceStatus() == CODECHAL_DUMMY_REFERENCE_ALLOCATED)
-                {
-                    decoder->GetOsInterface()->pfnFreeResource(decoder->GetOsInterface(), &dummyReference->OsResource);
-                }
-
-                // Reset dummy reference
-                MOS_ZeroMemory(dummyReference, sizeof(MOS_SURFACE));
-                decoder->SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_INVALID);
-
-                // Considering potential risk, disable the dummy reference from DPB path temporarily
-                //GetDummyReferenceFromDPB(m_ddiDecodeCtx);
-
-                //if (!Mos_ResourceIsNull(&dummyReference->OsResource))
-                //{
-                //    decoder->SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_DPB);
-                //}
-            }
-        }
-        else
-        {
-            // Init dummy reference
-            MOS_ZeroMemory(dummyReference, sizeof(MOS_SURFACE));
-            decoder->SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_INVALID);
-                
-            // Considering potential risk, disable the dummy reference from DPB path temporarily
-            //GetDummyReferenceFromDPB(m_ddiDecodeCtx);
-            //if (!Mos_ResourceIsNull(&dummyReference->OsResource))
-            //{
-            //    decoder->SetDummyReferenceStatus(CODECHAL_DUMMY_REFERENCE_DPB);
-            //}
-        }
+        CodechalDecode *decoder = dynamic_cast<CodechalDecode *>(m_ddiDecodeCtx->pCodecHal);
+        DDI_CHK_NULL(decoder, "Null decoder", VA_STATUS_ERROR_INVALID_PARAMETER);
+        DDI_CHK_RET(InitDummyReference(*decoder), "InitDummyReference failed!");
     }
 
     MOS_STATUS status = m_ddiDecodeCtx->pCodecHal->Execute((void *)(&m_ddiDecodeCtx->DecodeParams));
@@ -800,6 +809,8 @@ VAStatus DdiMediaDecode::EndPicture(
         DDI_ASSERTMESSAGE("DDI:DdiDecode_DecodeInCodecHal return failure.");
         return VA_STATUS_ERROR_DECODING_ERROR;
     }
+
+    m_ddiDecodeCtx->DecodeParams.m_executeCallIndex++;
 
     (&(m_ddiDecodeCtx->RTtbl))->pCurrentRT = nullptr;
 
@@ -1041,6 +1052,8 @@ VAStatus DdiMediaDecode::CreateCodecHal(
     }
     m_ddiDecodeCtx->pCodecHal = codecHal;
 
+    m_codechalSettings->enableCodecMmc = false;
+    m_codechalSettings->sfcInUseHinted = true;
     if (codecHal->Allocate(m_codechalSettings) != MOS_STATUS_SUCCESS)
     {
         DDI_ASSERTMESSAGE("Failure in decode allocate.\n");
@@ -1120,6 +1133,11 @@ void DdiMediaDecode::GetDummyReferenceFromDPB(
     if (i < DDI_MEDIA_MAX_SURFACE_NUMBER_CONTEXT)
     {
         CodechalDecode *decoder = dynamic_cast<CodechalDecode *>(decodeCtx->pCodecHal);
+        if (decoder == nullptr)
+        {
+            DDI_ASSERTMESSAGE("Codechal decode context is NULL.\n");
+            return;
+        }
         decoder->GetDummyReference()->OsResource = dummyReference.OsResource;
     }
 }

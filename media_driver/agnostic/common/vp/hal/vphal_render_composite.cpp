@@ -2477,6 +2477,12 @@ void CompositeState::SetScalingMode(
         pSource->ScalingMode = VPHAL_SCALING_BILINEAR;
     }
 
+    // Fix GPU Hang on EHL, since EHL has no AVS sampler
+    if (MEDIA_IS_SKU(m_pSkuTable, FtrDisableVEBoxFeatures))
+    {
+        pSource->ScalingMode = VPHAL_SCALING_BILINEAR;
+    }
+
     // WA for multilayer P010 AVS+3D one single pass corruption hw issue
     if (uSourceCount > 1 &&
         pSource->Format == Format_P010)
@@ -3150,7 +3156,6 @@ int32_t CompositeState::SetLayer(
     // Check whether sampler lumakey is needed. It will be used in SetSurfaceParams
     // when IsNV12SamplerLumakeyNeeded being called.
     pSource->bUseSamplerLumakey = IsSamplerLumakeySupported(pSource);
-
     //-------------------------------------------
     // Setup surface states
     //-------------------------------------------
@@ -3404,8 +3409,20 @@ int32_t CompositeState::SetLayer(
             }
             else
             {
-                fShiftX  = VPHAL_HW_LINEAR_SHIFT;   // Bilinear scaling shift
-                fShiftY  = VPHAL_HW_LINEAR_SHIFT;
+                //For Y210/Y216 with AVS(Y)+3D(U/V) sampler, the shift is not needed.
+                if ((pSource->Format == Format_Y210 ||
+                    pSource->Format == Format_Y216)
+                    && pSurfaceEntries[0]->bAVS)
+                {
+                    fShiftX = 0.0f;
+                    fShiftY = 0.0f;
+                }
+                else
+                {
+                    fShiftX = VPHAL_HW_LINEAR_SHIFT;  // Bilinear scaling shift
+                    fShiftY = VPHAL_HW_LINEAR_SHIFT;
+                }
+
                 pSamplerStateParams->Unorm.SamplerFilterMode = MHW_SAMPLER_FILTER_BILINEAR;
             }
             pSamplerStateParams->Unorm.AddressU = MHW_GFX3DSTATE_TEXCOORDMODE_CLAMP;
@@ -4393,9 +4410,16 @@ bool CompositeState::SubmitStates(
                 goto finish;
             }
         }
-        else // use cspace of first layer
+        else // use selected cspace by kdll
         {
-            dst_cspace = pFilter->cspace;
+            if (GFX_IS_GEN_9_OR_LATER(pRenderHal->Platform))
+            {
+                dst_cspace = pKernelDllState->colorfill_cspace;
+            }
+            else
+            {
+                dst_cspace = pFilter->cspace;
+            }
         }
 
         // Convert BG color only if not done so before. CSC is expensive!
@@ -5799,7 +5823,7 @@ MOS_STATUS CompositeState::RenderPhase(
             else if (m_need3DSampler                                       &&
                      pSource->ScalingMode != VPHAL_SCALING_AVS             &&
                      pSource->SurfType == SURF_IN_PRIMARY                  &&
-                     (IS_PL2_FORMAT(pSource->Format)                       ||
+                     ((IS_PL2_FORMAT(pSource->Format) && iLayer == 0)      || // when 3D sampler been used, PL2 chromasitting kernel does not support sub-layer chromasitting
                      pSource->Format == Format_YUY2))
             {
                 m_bChromaUpSampling   = VpHal_IsChromaUpSamplingNeeded(
@@ -5840,6 +5864,16 @@ MOS_STATUS CompositeState::RenderPhase(
                 pOsInterface->CurrentGpuContextOrdinal))
         {
             pSource->SampleType         = SAMPLE_PROGRESSIVE;
+            pSource->bInterlacedScaling = false;
+        }
+
+        // If there is no scaling used for interlace surface on 10bit PA formats, force to progressive due to no supoort for kernel.
+        if (pSource->bInterlacedScaling &&
+            (pSource->rcSrc.right - pSource->rcSrc.left) == (pSource->rcDst.right - pSource->rcDst.left) &&
+            (pSource->rcSrc.bottom - pSource->rcSrc.top) == (pSource->rcDst.bottom - pSource->rcDst.top) &&
+            (pSource->Format == Format_Y210 || pSource->Format == Format_Y410))
+        {
+            pSource->SampleType = SAMPLE_PROGRESSIVE;
             pSource->bInterlacedScaling = false;
         }
 
@@ -5948,6 +5982,7 @@ MOS_STATUS CompositeState::RenderPhase(
     {
         pCscParams = pKernelEntry->pCscParams;
         pMatrix    = &pCscParams->Matrix[pCscParams->MatrixID[0]];
+        pKernelDllState->colorfill_cspace = pKernelEntry->colorfill_cspace;
 
         if ((pMatrix->iProcampID != DL_PROCAMP_DISABLED) &&
             (pMatrix->iProcampID < m_iMaxProcampEntries))

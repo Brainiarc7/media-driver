@@ -34,7 +34,9 @@ extern template class MediaInterfacesFactory<MhwInterfaces>;
 extern template class MediaInterfacesFactory<MmdDevice>;
 extern template class MediaInterfacesFactory<MosUtilDevice>;
 extern template class MediaInterfacesFactory<CodechalDevice>;
+
 extern template class MediaInterfacesFactory<CMHalDevice>;
+
 extern template class MediaInterfacesFactory<VphalDevice>;
 extern template class MediaInterfacesFactory<RenderHalDevice>;
 extern template class MediaInterfacesFactory<Nv12ToP010Device>;
@@ -89,49 +91,158 @@ MOS_STATUS MhwInterfacesG11Icllp::Initialize(
     }
 
     // MHW_CP and MHW_MI must always be created
-    MOS_STATUS status;
+    MOS_STATUS status = MOS_STATUS_SUCCESS;
     m_cpInterface = Create_MhwCpInterface(osInterface);
+    if(m_cpInterface == nullptr)
+    {
+        MOS_OS_ASSERTMESSAGE("new osInterface failed");
+        status = MOS_STATUS_NULL_POINTER;
+        goto finish;
+    }
     m_miInterface = MOS_New(Mi, m_cpInterface, osInterface);
+    if (m_miInterface == nullptr)
+    {
+        MOS_OS_ASSERTMESSAGE("new MI interface failed");
+        status = MOS_STATUS_NULL_POINTER;
+        goto finish;
+    }
 
     if (params.Flags.m_render)
     {
         m_renderInterface =
             MOS_New(Render, m_miInterface, osInterface, gtSystemInfo, params.m_heapMode);
+        if (m_renderInterface == nullptr  || m_renderInterface->m_stateHeapInterface == nullptr)
+        {
+            MOS_OS_ASSERTMESSAGE("new m_renderInterface failed");
+            status = MOS_STATUS_NULL_POINTER;
+            goto finish;
+        }
     }
     if (params.Flags.m_stateHeap)
     {
         m_stateHeapInterface =
             MOS_New(StateHeap, osInterface, params.m_heapMode);
+        if (m_stateHeapInterface == nullptr)
+        {
+            MOS_OS_ASSERTMESSAGE("new m_stateHeapInterface failed");
+            status = MOS_STATUS_NULL_POINTER;
+            goto finish;
+        }
     }
     if (params.Flags.m_sfc)
     {
         m_sfcInterface = MOS_New(Sfc, osInterface);
+        if (m_sfcInterface == nullptr)
+        {
+            MOS_OS_ASSERTMESSAGE("new m_sfcInterface failed");
+            status = MOS_STATUS_NULL_POINTER;
+            goto finish;
+        }
     }
     if (params.Flags.m_vebox)
     {
         m_veboxInterface = MOS_New(Vebox, osInterface);
+        if (m_veboxInterface == nullptr)
+        {
+            MOS_OS_ASSERTMESSAGE("new m_veboxInterface failed");
+            status = MOS_STATUS_NULL_POINTER;
+            goto finish;
+        }
     }
 
     if (params.Flags.m_vdboxAll || params.Flags.m_mfx)
     {
         m_mfxInterface =
             MOS_New(Mfx, osInterface, m_miInterface, m_cpInterface, params.m_isDecode);
+        if (m_mfxInterface == nullptr)
+        {
+            MOS_OS_ASSERTMESSAGE("new m_mfxInterface failed");
+            status = MOS_STATUS_NULL_POINTER;
+            goto finish;
+        }
     }
     if (params.Flags.m_vdboxAll || params.Flags.m_hcp)
     {
         m_hcpInterface =
             MOS_New(Hcp, osInterface, m_miInterface, m_cpInterface, params.m_isDecode);
+        if (m_hcpInterface == nullptr)
+        {
+            MOS_OS_ASSERTMESSAGE("new m_hcpInterface failed");
+            status = MOS_STATUS_NULL_POINTER;
+            goto finish;
+        }
     }
     if (params.Flags.m_vdboxAll || params.Flags.m_huc)
     {
         m_hucInterface = MOS_New(Huc, osInterface, m_miInterface, m_cpInterface);
+        if (m_hucInterface == nullptr)
+        {
+            MOS_OS_ASSERTMESSAGE("new m_hucInterface failed");
+            status = MOS_STATUS_NULL_POINTER;
+            goto finish;
+        }
     }
     if (params.Flags.m_vdboxAll || params.Flags.m_vdenc)
     {
         m_vdencInterface = MOS_New(Vdenc, osInterface);
+        if (m_vdencInterface == nullptr)
+        {
+            MOS_OS_ASSERTMESSAGE("new m_vdencInterface failed");
+            status = MOS_STATUS_NULL_POINTER;
+            goto finish;
+        }
     }
 
-    return MOS_STATUS_SUCCESS;
+finish:
+    if (status != MOS_STATUS_SUCCESS)
+    {
+        if (m_cpInterface)
+        {
+            MOS_FreeMemory(m_cpInterface);
+            m_cpInterface = nullptr;
+        }
+        if (m_miInterface)
+        {
+            MOS_FreeMemory(m_miInterface);
+            m_miInterface = nullptr;
+        }
+        if (m_renderInterface)
+        {
+            MOS_FreeMemory(m_renderInterface);
+            m_renderInterface = nullptr;
+        }
+        if (m_stateHeapInterface)
+        {
+            MOS_FreeMemory(m_stateHeapInterface);
+            m_stateHeapInterface = nullptr;
+        }
+        if (m_sfcInterface)
+        {
+            MOS_FreeMemory(m_sfcInterface);
+            m_sfcInterface = nullptr;
+        }
+        if (m_veboxInterface)
+        {
+            MOS_FreeMemory(m_veboxInterface);
+            m_veboxInterface = nullptr;
+        }
+        if (m_mfxInterface)
+        {
+            MOS_FreeMemory(m_mfxInterface);
+            m_mfxInterface = nullptr;
+        }
+        if (m_hcpInterface)
+        {
+            MOS_FreeMemory(m_hcpInterface);
+            m_hcpInterface = nullptr;
+        }
+        if (m_hucInterface)
+        {
+            MOS_FreeMemory(m_hucInterface);
+            m_hucInterface = nullptr;
+        }
+    }
+    return status;
 }
 
 #ifdef _MMC_SUPPORTED
@@ -330,13 +441,11 @@ MOS_STATUS CodechalInterfacesG11Icllp::Initialize(
             return MOS_STATUS_INVALID_PARAMETER;
         }
 
-        CodechalDecode *decoder = dynamic_cast<CodechalDecode *>(m_codechalDevice);
-        if (decoder == nullptr)
+        if (m_codechalDevice == nullptr)
         {
             CODECHAL_PUBLIC_ASSERTMESSAGE("Decoder device creation failed!");
             return MOS_STATUS_NO_SPACE;
         }
-        decoder->SetHuCProductFamily(HUC_ICELAKE);
     }
     else if (CodecHalIsEncode(CodecFunction))
     {
@@ -499,6 +608,7 @@ MOS_STATUS CodechalInterfacesG11Icllp::Initialize(
     return MOS_STATUS_SUCCESS;
 }
 
+#if !__BSD__
 static bool icllpRegisteredCMHal =
     MediaInterfacesFactory<CMHalDevice>::
     RegisterHal<CMHalInterfacesG11Icllp>((uint32_t)IGFX_ICELAKE_LP);
@@ -526,6 +636,7 @@ MOS_STATUS CMHalInterfacesG11Icllp::Initialize(CM_HAL_STATE *pCmState)
     m_cmhalDevice->SetDecompressFlag(true);
     return MOS_STATUS_SUCCESS;
 }
+#endif
 
 static bool icllpRegisteredMosUtil =
     MediaInterfacesFactory<MosUtilDevice>::
@@ -594,4 +705,36 @@ MOS_STATUS DecodeHistogramDeviceG11Icllp::Initialize(
 
     return MOS_STATUS_SUCCESS;
 }
+
+static bool ehlRegisteredVphal =
+      MediaInterfacesFactory<VphalDevice>::
+      RegisterHal<VphalInterfacesG11Icllp>((uint32_t)IGFX_ELKHARTLAKE);
+
+static bool ehlRegisteredMhw =
+    MediaInterfacesFactory<MhwInterfaces>::
+    RegisterHal<MhwInterfacesG11Icllp>((uint32_t)IGFX_ELKHARTLAKE);
+
+static bool ehlRegisteredNv12ToP010 =
+    MediaInterfacesFactory<Nv12ToP010Device>::
+    RegisterHal<Nv12ToP010DeviceG11Icllp>((uint32_t)IGFX_ELKHARTLAKE);
+
+static bool ehlhpRegisteredCodecHal =
+    MediaInterfacesFactory<CodechalDevice>::
+    RegisterHal<CodechalInterfacesG11Icllp>((uint32_t)IGFX_ELKHARTLAKE);
+
+static bool ehlRegisteredCMHal =
+    MediaInterfacesFactory<CMHalDevice>::
+    RegisterHal<CMHalInterfacesG11Icllp>((uint32_t)IGFX_ELKHARTLAKE);
+
+static bool ehlRegisteredMosUtil =
+    MediaInterfacesFactory<MosUtilDevice>::
+    RegisterHal<MosUtilDeviceG11Icllp>((uint32_t)IGFX_ELKHARTLAKE);
+
+static bool ehlRegisteredRenderHal =
+    MediaInterfacesFactory<RenderHalDevice>::
+    RegisterHal<RenderHalInterfacesG11Icllp>((uint32_t)IGFX_ELKHARTLAKE);
+
+static bool ehlRegisteredDecodeHistogram =
+    MediaInterfacesFactory<DecodeHistogramDevice>::
+    RegisterHal<DecodeHistogramDeviceG11Icllp>((uint32_t)IGFX_ELKHARTLAKE);
 

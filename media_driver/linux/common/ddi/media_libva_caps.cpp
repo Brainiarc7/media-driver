@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2017-2018, Intel Corporation
+* Copyright (c) 2017-2019, Intel Corporation
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -25,6 +25,7 @@
 //!
 
 #include "hwinfo_linux.h"
+#include "linux_system_info.h"
 #include "media_libva_util.h"
 #include "media_libva_vp.h"
 #include "media_libva_common.h"
@@ -78,7 +79,11 @@ const uint32_t MediaLibvaCaps::m_vpSurfaceAttr[m_numVpSurfaceAttr] =
     VA_FOURCC('R', 'G', 'B', 'P'),
     VA_FOURCC('R', 'G', 'B', 'X'),
     VA_FOURCC('P', '0', '1', '0'),
-    VA_FOURCC('R','G','2', '4')
+    VA_FOURCC('R','G','2', '4'),
+    VA_FOURCC_ARGB,
+    VA_FOURCC_ABGR,
+    VA_FOURCC_A2R10G10B10,
+    VA_FOURCC_A2B10G10R10
 };
 
 const uint32_t MediaLibvaCaps::m_jpegSurfaceAttr[m_numJpegSurfaceAttr] =
@@ -2572,6 +2577,15 @@ VAStatus MediaLibvaCaps::QuerySurfaceAttributes(
         attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE;
         attribs[i].value.value.i = maxHeight;
         i++;
+
+        attribs[i].type = VASurfaceAttribMemoryType;
+        attribs[i].value.type = VAGenericValueTypeInteger;
+        attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
+        attribs[i].value.value.i = VA_SURFACE_ATTRIB_MEM_TYPE_VA |
+            VA_SURFACE_ATTRIB_MEM_TYPE_USER_PTR |
+            VA_SURFACE_ATTRIB_MEM_TYPE_KERNEL_DRM |
+            VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME;
+        i++;
     }
     else if(entrypoint == VAEntrypointEncSlice || entrypoint == VAEntrypointEncSliceLP || entrypoint == VAEntrypointEncPicture || entrypoint == VAEntrypointFEI)
     {
@@ -2680,6 +2694,15 @@ VAStatus MediaLibvaCaps::QuerySurfaceAttributes(
         {
             attribs[i].value.value.i = m_encJpegMinHeight;
         }
+        i++;
+
+        attribs[i].type = VASurfaceAttribMemoryType;
+        attribs[i].value.type = VAGenericValueTypeInteger;
+        attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
+        attribs[i].value.value.i = VA_SURFACE_ATTRIB_MEM_TYPE_VA |
+            VA_SURFACE_ATTRIB_MEM_TYPE_USER_PTR |
+            VA_SURFACE_ATTRIB_MEM_TYPE_KERNEL_DRM |
+            VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME;
         i++;
     }
     else
@@ -3109,6 +3132,11 @@ GMM_RESOURCE_FORMAT MediaLibvaCaps::ConvertFourccToGmmFmt(uint32_t fourcc)
     }
 }
 
+bool MediaLibvaCaps::IsMfeSupportedOnPlatform(const PLATFORM &platform)
+{
+    return (GFX_IS_PRODUCT(platform, IGFX_SKYLAKE));
+}
+
 VAStatus MediaLibvaCaps::GetMbProcessingRateDec(
         MEDIA_FEATURE_TABLE *skuTable,
         uint32_t *mbProcessingRatePerSec)
@@ -3237,7 +3265,17 @@ MediaLibvaCaps * MediaLibvaCaps::CreateMediaLibvaCaps(DDI_MEDIA_CONTEXT *mediaCt
 {
     if (mediaCtx != nullptr)
     {
-        return CapsFactory::CreateCaps((uint32_t)mediaCtx->platform.eProductFamily, mediaCtx);
+
+        MediaLibvaCaps * Caps = CapsFactory::CreateCaps(
+            (uint32_t)mediaCtx->platform.eProductFamily + MEDIA_EXT_FLAG, mediaCtx);
+
+        if(Caps == nullptr)
+        {
+            Caps = CapsFactory::CreateCaps((uint32_t)mediaCtx->platform.eProductFamily, mediaCtx);
+        }
+
+        return Caps;
+
     }
     else
     {

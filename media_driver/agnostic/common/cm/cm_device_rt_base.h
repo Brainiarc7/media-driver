@@ -58,6 +58,7 @@ class CmProgram;
 class CmBuffer;
 class CmBufferUP;
 class CmBufferSVM;
+class CmBufferStateless;
 class CmSurface2D;
 class CmSurface2DUP;
 class CmSurface2DUPRT;
@@ -300,6 +301,13 @@ public:
         CM_SURFACE_ADDRESS_CONTROL_MODE addressControl,
         SurfaceIndex* &sampler8x8SurfaceIndex);
 
+    CM_RT_API int32_t CreateBufferStateless(size_t size,
+                                            uint32_t option,
+                                            void *sysMem,
+                                            CmBufferStateless *&bufferStateless);
+
+    CM_RT_API int32_t DestroyBufferStateless(CmBufferStateless* & bufferStateless);
+
     void* GetAccelData(){ return m_accelData; }
 
     MOS_CONTEXT* GetUMDCtx(){ return m_mosContext; }
@@ -359,8 +367,6 @@ public:
 
     int32_t GetPrintBufferMem(unsigned char *& pPrintBufferMem) const;
 
-    int32_t ClearPrintBuffer();
-
     int32_t GetSurf2DLookUpEntry(uint32_t index,
                                  PCMLOOKUP_ENTRY &pLookupEntry);
 
@@ -392,6 +398,8 @@ public:
 #endif
 
     int32_t DestroyVmeSurface(SurfaceIndex *& pVmeIndex);
+
+    int32_t CreatePrintBuffer();
 
     CmNotifierGroup* GetNotifiers() {return m_notifierGroup;}
 
@@ -550,15 +558,13 @@ protected:
 
     CSync m_criticalSectionQueue;
 
-    unsigned char* m_printBufferMem;
+    std::list<uint8_t *> m_printBufferMems;
 
-    CmBufferUP*    m_printBufferUP;
+    std::list<CmBufferUP *> m_printBufferUPs;
 
     bool           m_isPrintEnabled;
 
     size_t         m_printBufferSize;
-
-    SurfaceIndex*  m_printBufferIndex;
 
     CmDynamicArray m_threadGroupSpaceArray;
 
@@ -588,6 +594,7 @@ protected:
 
     uint32_t       m_kernelsLoaded;
 
+    bool           m_preloadKernelEnabled;
 private:
     CmDeviceRTBase(const CmDeviceRTBase& other);
 

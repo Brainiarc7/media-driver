@@ -86,6 +86,10 @@ typedef struct _MHW_VDBOX_VDENC_WEIGHT_OFFSET_PARAMS
     uint8_t     ucList;
     char        LumaWeights[2][CODEC_MAX_NUM_REF_FRAME_HEVC];
     int16_t     LumaOffsets[2][CODEC_MAX_NUM_REF_FRAME_HEVC];
+    char        ChromaWeights[2][CODEC_MAX_NUM_REF_FRAME_HEVC][2];
+    int16_t     ChromaOffsets[2][CODEC_MAX_NUM_REF_FRAME_HEVC][2];
+    uint32_t    dwChromaDenom;
+    bool        isLowDelay = true;
 } MHW_VDBOX_VDENC_WEIGHT_OFFSET_PARAMS, *PMHW_VDBOX_VDENC_WEIGHT_OFFSET_PARAMS;
 
 typedef struct _MHW_VDBOX_VDENC_CMD1_PARAMS
@@ -93,6 +97,7 @@ typedef struct _MHW_VDBOX_VDENC_CMD1_PARAMS
     uint32_t                                Mode;
     PCODEC_HEVC_ENCODE_PICTURE_PARAMS       pHevcEncPicParams;
     PCODEC_HEVC_ENCODE_SLICE_PARAMS         pHevcEncSlcParams;
+    PCODEC_VP9_ENCODE_PIC_PARAMS            pVp9EncPicParams = nullptr;;
     uint8_t                                *pucVdencMvCosts;
     uint8_t                                *pucVdencRdMvCosts;
     uint8_t                                *pucVdencHmeMvCosts;
@@ -138,6 +143,13 @@ struct MHW_VDBOX_VDENC_CMD2_STATE
     bool                                    bPakOnlyMultipassEnable = false;
     void                                    *pInputParams = nullptr;
     bool                                    bHevcVisualQualityImprovement = false;  //!< VQI enable flag
+    
+    bool                                    bTileReplayEnable = false;
+    bool                                    bCaptureModeEnable = false;
+    uint8_t                                 m_WirelessSessionID = 0;
+    bool                                    bIsLowDelayB = false;
+    int8_t                                  *pRefIdxMapping = nullptr;
+    uint8_t                                 recNotFilteredID = 0;
     virtual ~MHW_VDBOX_VDENC_CMD2_STATE() {}
 };
 using PMHW_VDBOX_VDENC_CMD2_STATE = std::shared_ptr<MHW_VDBOX_VDENC_CMD2_STATE>;
@@ -171,6 +183,7 @@ protected:
 
     bool                        m_rowstoreCachingSupported = 0;
     MHW_VDBOX_ROWSTORE_CACHE    m_vdencRowStoreCache = {};    //!< vdenc row store cache
+    MHW_VDBOX_ROWSTORE_CACHE    m_vdencIpdlRowstoreCache = {}; //!< vdenc IntraPred row store cache
     bool                        m_rhoDomainStatsEnabled = false; //! indicate if rho domain stats is enabled
     bool                        m_perfModeSupported = true; //! indicate perf mode is supported
 

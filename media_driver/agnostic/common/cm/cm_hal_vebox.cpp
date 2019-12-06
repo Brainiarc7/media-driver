@@ -61,6 +61,7 @@ MOS_STATUS HalCm_ExecuteVeboxTask(
     //-----------------------------------
     CM_CHK_NULL_RETURN_MOSERROR(state);
     CM_CHK_NULL_RETURN_MOSERROR(state->osInterface);
+    CM_CHK_NULL_RETURN_MOSERROR(state->veboxInterface);
     CM_CHK_NULL_RETURN_MOSERROR(veboxTaskParam);
     //-----------------------------------
 
@@ -68,6 +69,7 @@ MOS_STATUS HalCm_ExecuteVeboxTask(
     MOS_ZeroMemory(&cmdBuffer, sizeof(MOS_COMMAND_BUFFER));
 
     veboxInterface = state->veboxInterface;
+
     veboxHeap = veboxInterface->m_veboxHeap;
     osInterface = state->osInterface;
     remaining = 0;
@@ -84,8 +86,6 @@ MOS_STATUS HalCm_ExecuteVeboxTask(
     state->cmVeboxSettings.diOutputFrames = veboxTaskParam->cmVeboxState.DIOutputFrames;
 
     cmVeboxSurfaceData = veboxTaskParam->veboxSurfaceData;
-    // switch GPU context to VEBOX
-    osInterface->pfnSetGpuContext(osInterface, MOS_GPU_CONTEXT_VEBOX);
 
     // reset states before execute
     // (clear allocations, get GSH allocation index + any additional housekeeping)
@@ -280,33 +280,19 @@ MOS_STATUS HalCm_ExecuteVeboxTask(
     // Make sure copy kernel and update kernels are finished before submitting
     // VEBOX commands
     //---------------------------------
-    osInterface->pfnSyncGpuContext(
-        osInterface,
-        (MOS_GPU_CONTEXT)veboxTaskParam->queueOption.GPUContext,
-        MOS_GPU_CONTEXT_VEBOX);
+    if ((MOS_GPU_CONTEXT)veboxTaskParam->queueOption.GPUContext != MOS_GPU_CONTEXT_CM_COMPUTE)
+    {
+        osInterface->pfnSyncGpuContext(
+            osInterface,
+            (MOS_GPU_CONTEXT)veboxTaskParam->queueOption.GPUContext,
+            MOS_GPU_CONTEXT_VEBOX);
+    }
 
     osInterface->pfnResetPerfBufferID(osInterface);
     if (!(osInterface->pfnIsPerfTagSet(osInterface)))
     {
         osInterface->pfnIncPerfFrameID(osInterface);
         osInterface->pfnSetPerfTag(osInterface, VEBOX_TASK_PERFTAG_INDEX);
-    }
-
-    // Add PipeControl to invalidate ISP and MediaState to avoid PageFault issue
-    MHW_PIPE_CONTROL_PARAMS pipeControlParams;
-
-    MOS_ZeroMemory(&pipeControlParams, sizeof(pipeControlParams));
-    pipeControlParams.dwFlushMode = MHW_FLUSH_WRITE_CACHE;
-    pipeControlParams.bGenericMediaStateClear = true;
-    pipeControlParams.bIndirectStatePointersDisable = true;
-    pipeControlParams.bDisableCSStall = false;
-    CM_CHK_MOSSTATUS_GOTOFINISH(renderHal->pMhwMiInterface->AddPipeControl(&cmdBuffer, nullptr, &pipeControlParams));
-
-    if (MEDIA_IS_WA(renderHal->pWaTable, WaSendDummyVFEafterPipelineSelect))
-    {
-        MHW_VFE_PARAMS vfeStateParams = {};
-        vfeStateParams.dwNumberofURBEntries = 1;
-        CM_CHK_MOSSTATUS_GOTOFINISH(renderHal->pMhwRenderInterface->AddMediaVfeCmd(&cmdBuffer, &vfeStateParams));
     }
 
     //Couple to the BB_START , otherwise GPU Hang without it in KMD.
@@ -422,6 +408,8 @@ MOS_STATUS HalCm_SetVeboxDiIecpCmdParams(
     uint32_t                 height;
     bool                     dienable;
     MHW_VEBOX_SURFACE_PARAMS surfInput;
+
+    CM_CHK_NULL_RETURN_MOSERROR(state->veboxInterface);
 
     // DN only, will add other support later
     dienable = false;

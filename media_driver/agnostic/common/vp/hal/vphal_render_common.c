@@ -484,6 +484,8 @@ MOS_STATUS VpHal_RndrCommonSubmitCommands(
 
     // Add kernel info to log.
     HalOcaInterface::DumpVpKernelInfo(CmdBuffer, *pOsContext, KernelID, 0, nullptr);
+    // Add vphal param to log.
+    HalOcaInterface::DumpVphalParam(CmdBuffer, *pOsContext, pRenderHal->pVphalOcaDumper);
 
     // Initialize command buffer and insert prolog
     VPHAL_RENDER_CHK_STATUS(pRenderHal->pfnInitCommandBuffer(pRenderHal, &CmdBuffer, &GenericPrologParams));
@@ -747,6 +749,8 @@ MOS_STATUS VpHal_RndrSubmitCommands(
 
     // Add kernel info to log.
     HalOcaInterface::DumpVpKernelInfo(CmdBuffer, *pOsContext, KernelID, FcKernelCount, FcKernelList);
+    // Add vphal param to log.
+    HalOcaInterface::DumpVphalParam(CmdBuffer, *pOsContext, pRenderHal->pVphalOcaDumper);
 
     // Initialize command buffer and insert prolog
     VPHAL_RENDER_CHK_STATUS(pRenderHal->pfnInitCommandBuffer(pRenderHal, &CmdBuffer, &GenericPrologParams));
@@ -1679,6 +1683,17 @@ MOS_STATUS VpHal_RndrUpdateStatusTableAfterSubmit(
     pStatusEntry->dwTag             = dwLastTag;
     pStatusEntry->dwStatus          = (eLastStatus == MOS_STATUS_SUCCESS)? VPREP_NOTREADY : VPREP_ERROR;
     pStatusTable->uiCurrent         = (pStatusTable->uiCurrent + 1) & (VPHAL_STATUS_TABLE_MAX_SIZE - 1);
+
+    // CM may use a different streamIndex, record it here
+    if (pStatusTableUpdateParams->bUpdateStreamIndex)
+    {
+        pStatusEntry->isStreamIndexSet = true;
+        pStatusEntry->streamIndex = (uint16_t)pOsInterface->streamIndex;
+    }
+    else
+    {
+        pStatusEntry->isStreamIndexSet = false;
+    }
 
 finish:
     return eStatus;

@@ -664,6 +664,15 @@ public:
     virtual GMM_RESOURCE_FORMAT ConvertFourccToGmmFmt(uint32_t fourcc);
 
     //!
+    //! \brief    Check if MFE is supported on the platform
+    //!
+    //! \param    [in] PLATFORM
+    //!
+    //! \return   true if supported, otherwise false
+    //!
+    virtual bool IsMfeSupportedOnPlatform(const PLATFORM &platform);
+
+    //!
     //! \brief    Initialize the MediaLibvaCaps instance for current platform 
     //!
     //! \return   VAStatus 
@@ -752,7 +761,7 @@ protected:
 
     static const uint16_t m_maxProfiles = 17; //!< Maximum number of supported profiles
     static const uint16_t m_maxProfileEntries = 64; //!< Maximum number of supported profile & entrypoint combinations
-    static const uint32_t m_numVpSurfaceAttr = 11; //!< Number of VP surface attributes
+    static const uint32_t m_numVpSurfaceAttr = 15; //!< Number of VP surface attributes
     static const uint32_t m_numJpegSurfaceAttr = 7; //!< Number of JPEG surface attributes
     static const uint32_t m_numJpegEncSurfaceAttr = 4; //!< Number of JPEG encode surface attributes
     static const uint16_t m_maxEntrypoints = 7; //!<  Maximum number of supported entrypoints

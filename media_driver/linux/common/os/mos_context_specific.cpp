@@ -448,7 +448,8 @@ MOS_STATUS OsContextSpecific::Init(PMOS_CONTEXT pOsDriverContext)
         }
 
         m_use64BitRelocs = true;
-        m_useSwSwizzling = MEDIA_IS_SKU(&m_skuTable, FtrSimulationMode); 
+        m_useSwSwizzling = MEDIA_IS_SKU(&m_skuTable, FtrSimulationMode)
+                        || MEDIA_IS_SKU(&m_skuTable, FtrUseSwSwizzling);
         m_tileYFlag      = MEDIA_IS_SKU(&m_skuTable, FtrTileY);
     
         if (!Mos_Solo_IsEnabled() && MEDIA_IS_SKU(&m_skuTable,FtrContextBasedScheduling))
@@ -548,22 +549,26 @@ void OsContextSpecific::Destroy()
 
     if (GetOsContextValid() == true)
     {
-        for (auto i = 0; i < MOS_GPU_CONTEXT_MAX; i++)
+        // APO MOS will destory each stream's GPU context at different place
+        if (!g_apoMosEnabled)
         {
-            if (m_GpuContextHandle[i] != MOS_GPU_CONTEXT_INVALID_HANDLE)
+            for (auto i = 0; i < MOS_GPU_CONTEXT_MAX; i++)
             {
-                if (m_gpuContextMgr == nullptr)
+                if (m_GpuContextHandle[i] != MOS_GPU_CONTEXT_INVALID_HANDLE)
                 {
-                    MOS_OS_ASSERTMESSAGE("GpuContextMgr is null when destroy GpuContext");
-                    break;
+                    if (m_gpuContextMgr == nullptr)
+                    {
+                        MOS_OS_ASSERTMESSAGE("GpuContextMgr is null when destroy GpuContext");
+                        break;
+                    }
+                    auto gpuContext = m_gpuContextMgr->GetGpuContext(m_GpuContextHandle[i]);
+                    if (gpuContext == nullptr)
+                    {
+                        MOS_OS_ASSERTMESSAGE("cannot find the gpuContext corresponding to the active gpuContextHandle");
+                        continue;
+                    }
+                    m_gpuContextMgr->DestroyGpuContext(gpuContext);
                 }
-                auto gpuContext = m_gpuContextMgr->GetGpuContext(m_GpuContextHandle[i]);
-                if (gpuContext == nullptr)
-                {
-                    MOS_OS_ASSERTMESSAGE("cannot find the gpuContext corresponding to the active gpuContextHandle");
-                    continue;
-                }
-                m_gpuContextMgr->DestroyGpuContext(gpuContext);
             }
         }
     

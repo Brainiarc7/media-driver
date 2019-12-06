@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2017, Intel Corporation
+* Copyright (c) 2017-2019, Intel Corporation
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -5074,7 +5074,7 @@ MOS_STATUS CodechalEncodeAvcEncG10::SetCurbeAvcMbEnc(
         }
 
         MHW_VDBOX_AVC_SLICE_STATE sliceState;
-        memset((void *)&sliceState, 0, sizeof(MHW_VDBOX_AVC_SLICE_STATE));
+        MOS_ZeroMemory(&sliceState, sizeof(sliceState));
         sliceState.pEncodeAvcSeqParams = seqParams;
         sliceState.pEncodeAvcPicParams = picParams;
         sliceState.pEncodeAvcSliceParams = slcParams;
@@ -5430,7 +5430,7 @@ MOS_STATUS CodechalEncodeAvcEncG10::SetCurbeAvcFrameBrcUpdate(PCODECHAL_ENCODE_A
     cmd.m_dw15.EnableROI = params->ucEnableROI;
 
     MHW_VDBOX_AVC_SLICE_STATE sliceState;
-    memset((void *)&sliceState, 0, sizeof(MHW_VDBOX_AVC_SLICE_STATE));
+    MOS_ZeroMemory(&sliceState, sizeof(sliceState));
     sliceState.pEncodeAvcSeqParams = seqParams;
     sliceState.pEncodeAvcPicParams = picParams;
     sliceState.pEncodeAvcSliceParams = slcParams;
@@ -6845,7 +6845,7 @@ MOS_STATUS CodechalEncodeAvcEncG10::KernelDebugDumps()
     }
 
         CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
-            &BrcBuffers.resBrcImageStatesReadBuffer[m_currRecycledBufIdx],
+            &BrcBuffers.resBrcImageStatesWriteBuffer,
             CodechalDbgAttr::attrOutput,
             "ImgStateWrite",
             BRC_IMG_STATE_SIZE_PER_PASS * m_hwInterface->GetMfxInterface()->GetBrcNumPakPasses(),
@@ -6862,12 +6862,12 @@ MOS_STATUS CodechalEncodeAvcEncG10::KernelDebugDumps()
         if (!Mos_ResourceIsNull(&BrcBuffers.sBrcMbQpBuffer.OsResource))
         {
             CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
-                &BrcBuffers.resBrcPakStatisticBuffer[m_brcPakStatisticsSize],
+                &BrcBuffers.sBrcMbQpBuffer.OsResource,
                 CodechalDbgAttr::attrOutput,
                 "MbQp",
                 BrcBuffers.sBrcMbQpBuffer.dwPitch*BrcBuffers.sBrcMbQpBuffer.dwHeight,
                 BrcBuffers.dwBrcMbQpBottomFieldOffset,
-                CODECHAL_MEDIA_STATE_BRC_UPDATE));
+                CODECHAL_MEDIA_STATE_MB_BRC_UPDATE));
         }
         if (BrcBuffers.pMbEncKernelStateInUse)
         {

@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2011-2018, Intel Corporation
+* Copyright (c) 2011-2019, Intel Corporation
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -567,6 +567,13 @@ MOS_STATUS VphalRenderer::ProcessRenderParameter(
     pRender[VPHAL_RENDER_ID_COMPOSITE]->SetStatusReportParams(this, pRenderParams);
     pRender[VPHAL_RENDER_ID_VEBOX+uiCurrentChannel]->SetStatusReportParams(this, pRenderParams);
 
+    // Decide whether Hdr path should be chosen.
+    VPHAL_RENDER_CHK_STATUS(GetHdrPathNeededFlag(pRenderParams, pRenderPassData));
+    if (pRenderPassData->bHdrNeeded)
+    {
+        VPHAL_RNDR_SET_STATUS_REPORT_PARAMS(pHdrState, this, pRenderParams);
+    }
+
     VPHAL_RNDR_SET_STATUS_REPORT_PARAMS(&Align16State, this, pRenderParams);
     // Loop through the sources
     for (uiIndex = 0;
@@ -642,6 +649,7 @@ MOS_STATUS VphalRenderer::ProcessRenderParameter(
         // Check if Slice Shutdown can be enabled
         // Vebox performance is not impacted by slice shutdown
         if (!(pPrimarySurface == nullptr ||                                      // Valid Layer
+            pRenderPassData->bHdrNeeded  ||                                      // HDR Disabled
             pRenderParams->Component == COMPONENT_VPreP))                        // VpostP usage
         {
             bSliceReconfig = true;
@@ -686,7 +694,10 @@ MOS_STATUS VphalRenderer::RenderPass(
     VPHAL_RENDER_ASSERT(m_pRenderHal);
 
     eStatus                 = MOS_STATUS_SUCCESS;
+    uiIndex_in              = 0;
+    uiIndex_out             = 0;
     pVeboxExecState         = &VeboxExecState[uiCurrentChannel];
+    MOS_ZeroMemory(&RenderPassData, sizeof(RenderPassData));
 
     RenderPassData.AllocateTempOutputSurfaces();
     RenderPassData.bCompNeeded      = true;
@@ -734,7 +745,7 @@ MOS_STATUS VphalRenderer::RenderPass(
                 }
                 // update the first target point
                 pRenderParams->pTarget[0]                = StoreRenderParams.pTarget[uiIndex_out];
-                pRenderParams->pTarget[0]->bUsrPtr       = StoreRenderParams.pTarget[uiIndex_out]->bUsrPtr;
+                pRenderParams->pTarget[0]->b16UsrPtr     = StoreRenderParams.pTarget[uiIndex_out]->b16UsrPtr;
                 if (StoreRenderParams.uDstCount > 1)
                 {
                     // for multi output, support different scaling ratio but doesn't support cropping.
@@ -764,10 +775,16 @@ MOS_STATUS VphalRenderer::RenderPass(
                 {
                     VPHAL_RENDER_CHK_STATUS(RenderComposite(pRenderParams, &RenderPassData));
                 }
+                else if (VpHal_RndrIsHdrPathNeeded(this, pRenderParams, &RenderPassData) &&
+                        (pHdrState &&
+                         !pHdrState->bBypassHdrKernelPath))
+                {
+                    VPHAL_RENDER_CHK_STATUS(VpHal_RndrRenderHDR(this, pRenderParams, &RenderPassData));
+                }
             }
             // restore render pointer and count.
             pRenderParams->pTarget[0]            = StoreRenderParams.pTarget[0];
-            pRenderParams->pTarget[0]->bUsrPtr   = StoreRenderParams.pTarget[0]->bUsrPtr;
+            pRenderParams->pTarget[0]->b16UsrPtr = StoreRenderParams.pTarget[0]->b16UsrPtr;
             pRenderParams->uDstCount             = StoreRenderParams.uDstCount;
         }
     }
@@ -856,9 +873,14 @@ MOS_STATUS VphalRenderer::RenderSingleStream(
             this, pRenderPassData->uiSrcIndex, VPHAL_DBG_DUMP_TYPE_POST_DNDI, pRenderPassData->pSrcSurface);
 
         // We'll continue even if Advanced render fails
-        if ((eStatus == MOS_STATUS_SUCCESS) && (pRenderPassData->bCompNeeded))
+        if ((eStatus == MOS_STATUS_SUCCESS) && (pRenderPassData->bCompNeeded || pRenderPassData->bHdrNeeded))
         {
             pRenderParams->pSrc[pRenderPassData->uiSrcIndex] = pRenderPassData->pSrcSurface;
+        }
+
+        if (pRenderPassData->bHdrNeeded && (pHdrState && !pHdrState->bBypassHdrKernelPath))
+        {
+            pRenderPassData->bCompNeeded = false;
         }
     }
 
@@ -919,24 +941,17 @@ MOS_STATUS VphalRenderer::RenderComposite(
         pRenderParams->uSrcCount, VPHAL_DBG_DUMP_TYPE_PRE_COMP);
     //------------------------------------------
 
-    if (pRenderPassData->pSrcSurface && 
-        (pRenderPassData->pSrcSurface->bUsrPtr ||
-        pRenderParams->pTarget[0]->bUsrPtr))
+    if (pRenderPassData->pSrcSurface &&
+        (pRenderPassData->pSrcSurface->b16UsrPtr ||
+        pRenderParams->pTarget[0]->b16UsrPtr) &&
+        (VpHal_RndrIs16Align(&Align16State, pRenderParams)))
     {
-        if (VpHal_RndrIs16Align(pRenderParams))
-        {
-            eStatus = Align16State.pfnRender(&Align16State, pRenderParams);
-        }
-        else
-        {
-            // if doesn't support format under UserPtr mode, return error
-            VPHAL_RENDER_ASSERTMESSAGE("Invalid UserPtr parameters!");
-            eStatus = MOS_STATUS_INVALID_PARAMETER;
-            goto finish;
-        }
+        // process 16aligned usrptr mode.
+        VPHAL_RENDER_CHK_STATUS(Align16State.pfnRender(&Align16State, pRenderParams));
     }
     else
     {
+        // fallback to legacy path
         VPHAL_RENDER_CHK_STATUS(pRender[VPHAL_RENDER_ID_COMPOSITE]->Render(pRenderParams, nullptr));
     }
 
@@ -1191,6 +1206,15 @@ MOS_STATUS VphalRenderer::Render(
 
         VPHAL_RENDER_CHK_STATUS(RenderPass(&RenderParams));
     }
+
+#if defined(LINUX)
+    if (m_reporting)
+    {
+        WriteUserFeature(__VPHAL_VEBOX_OUTPUTPIPE_MODE_ID, m_reporting->OutputPipeMode);
+        WriteUserFeature(__VPHAL_VEBOX_FEATURE_INUSE_ID, m_reporting->VEFeatureInUse);
+    }
+#endif
+
 finish:
     uiFrameCounter++;
     return eStatus;
@@ -1315,16 +1339,22 @@ MOS_STATUS VphalRenderer::Initialize(
     Kdll_KernelCache                    *pKernelCache;
     Kdll_CacheEntry                     *pCacheEntryTable;
 
+    pKernelBin      = nullptr;
+    pFcPatchBin     = nullptr;
+    eStatus         = MOS_STATUS_UNKNOWN;
+    pOsInterface    = m_pOsInterface;
+    pRenderHal      = m_pRenderHal;
+    iResult         = 0;
+    pKernelBin      = nullptr;
+    pFcPatchBin     = nullptr;
+
+    MOS_ZeroMemory(&MhwKernelParam, sizeof(MHW_KERNEL_PARAM));
+
     //---------------------------------------
     VPHAL_RENDER_CHK_NULL(pSettings);
     VPHAL_RENDER_CHK_NULL(m_pOsInterface);
     VPHAL_RENDER_CHK_NULL(m_pRenderHal);
     //---------------------------------------
-
-    eStatus         = MOS_STATUS_UNKNOWN;
-    pOsInterface    = m_pOsInterface;
-    pRenderHal      = m_pRenderHal;
-    pFcPatchBin     = nullptr;
 
     Align16State.pPerfData   = &PerfData;
     Fast1toNState.pPerfData  = &PerfData;
@@ -1435,9 +1465,40 @@ MOS_STATUS VphalRenderer::Initialize(
         bSkuDisableVpFor4K = false;
     }
 
+    // Initialize Hdr renderer
+    if (MEDIA_IS_SKU(m_pSkuTable, FtrHDR) && pHdrState)
+    {
+        VPHAL_RENDER_CHK_STATUS(pHdrState->pfnInitialize(
+            pHdrState,
+            pSettings,
+            pKernelDllState));
+    }
+
     eStatus = MOS_STATUS_SUCCESS;
 
 finish:
+    if (eStatus != MOS_STATUS_SUCCESS)
+    {
+        if (pKernelBin)
+        {
+            MOS_SafeFreeMemory(pKernelBin);
+            if (pKernelDllState && pKernelDllState->ComponentKernelCache.pCache == pKernelBin)
+            {
+                pKernelDllState->ComponentKernelCache.pCache = nullptr;
+            }
+            pKernelBin = nullptr;
+        }
+
+        if (pFcPatchBin)
+        {
+            MOS_SafeFreeMemory(pFcPatchBin);
+            if (pKernelDllState && pKernelDllState->CmFcPatchCache.pCache == pFcPatchBin)
+            {
+                pKernelDllState->CmFcPatchCache.pCache = nullptr;
+            }
+            pFcPatchBin = nullptr;
+        }
+    }
     return eStatus;
 }
 
@@ -1449,54 +1510,6 @@ finish:
 VphalRenderer::~VphalRenderer()
 {
     VPHAL_RENDER_CHK_NULL_NO_STATUS(m_pOsInterface);
-
-#ifdef LINUX
-    if(m_reporting)
-    {
-        MOS_USER_FEATURE_VALUE_WRITE_DATA   userFeatureWriteData;
-
-        MOS_ZeroMemory(&userFeatureWriteData, sizeof(userFeatureWriteData));
-        userFeatureWriteData.Value.i32Data  = m_reporting->OutputPipeMode;
-        userFeatureWriteData.ValueID        = __VPHAL_VEBOX_OUTPUTPIPE_MODE_ID;
-        MOS_UserFeature_WriteValues_ID(nullptr, &userFeatureWriteData, 1);
-
-        MOS_ZeroMemory(&userFeatureWriteData, sizeof(userFeatureWriteData));
-        userFeatureWriteData.Value.bData  = m_reporting->VEFeatureInUse;
-        userFeatureWriteData.ValueID        = __VPHAL_VEBOX_FEATURE_INUSE_ID;
-        MOS_UserFeature_WriteValues_ID(nullptr, &userFeatureWriteData, 1);
-#ifdef _MMC_SUPPORTED
-        //VP MMC In Use
-        MOS_ZeroMemory(&userFeatureWriteData, sizeof(userFeatureWriteData));
-        userFeatureWriteData.Value.bData  = m_reporting->VPMMCInUse;
-        userFeatureWriteData.ValueID        = __VPHAL_ENABLE_MMC_IN_USE_ID;
-        MOS_UserFeature_WriteValues_ID(nullptr, &userFeatureWriteData, 1);
-
-        //VP Primary Surface Compress Mode
-        MOS_ZeroMemory(&userFeatureWriteData, sizeof(userFeatureWriteData));
-        userFeatureWriteData.Value.bData  = m_reporting->PrimaryCompressMode;
-        userFeatureWriteData.ValueID        = __VPHAL_PRIMARY_SURFACE_COMPRESS_MODE_ID;
-        MOS_UserFeature_WriteValues_ID(nullptr, &userFeatureWriteData, 1);
-
-        //VP Primary Surface Compressible
-        MOS_ZeroMemory(&userFeatureWriteData, sizeof(userFeatureWriteData));
-        userFeatureWriteData.Value.bData  = m_reporting->PrimaryCompressible;
-        userFeatureWriteData.ValueID        = __VPHAL_PRIMARY_SURFACE_COMPRESSIBLE_ID;
-        MOS_UserFeature_WriteValues_ID(nullptr, &userFeatureWriteData, 1);
-
-        //VP RT Compress Mode
-        MOS_ZeroMemory(&userFeatureWriteData, sizeof(userFeatureWriteData));
-        userFeatureWriteData.Value.bData  = m_reporting->RTCompressMode;
-        userFeatureWriteData.ValueID        = __VPHAL_RT_COMPRESS_MODE_ID;
-        MOS_UserFeature_WriteValues_ID(nullptr, &userFeatureWriteData, 1);
-
-        //VP RT Compressible
-        MOS_ZeroMemory(&userFeatureWriteData, sizeof(userFeatureWriteData));
-        userFeatureWriteData.Value.bData  = m_reporting->RTCompressible;
-        userFeatureWriteData.ValueID        = __VPHAL_RT_COMPRESSIBLE_ID;
-        MOS_UserFeature_WriteValues_ID(nullptr, &userFeatureWriteData, 1);
-#endif
-    }
-#endif
 
     FreeIntermediateSurfaces();
 
@@ -1528,6 +1541,13 @@ VphalRenderer::~VphalRenderer()
     if (Fast1toNState.pfnDestroy)
     {
         Fast1toNState.pfnDestroy(&Fast1toNState);
+    }
+
+    // Destroy resources allocated for Hdr
+    if (MEDIA_IS_SKU(m_pSkuTable, FtrHDR) && pHdrState && pHdrState->pfnDestroy)
+    {
+        pHdrState->pfnDestroy(pHdrState);
+        MOS_Delete(pHdrState);
     }
 
     // Destroy surface dumper
@@ -1699,8 +1719,9 @@ VphalRenderer::VphalRenderer(
     m_surfaceDumper(nullptr),
     m_parameterDumper(nullptr),
 #endif
-    StatusTable(),
+    m_statusTable(nullptr),
     maxSrcRect(),
+    pHdrState(nullptr),
     m_pRenderHal(pRenderHal),
     m_pOsInterface(pRenderHal ? pRenderHal->pOsInterface : nullptr),
     m_pSkuTable(nullptr),
@@ -2115,5 +2136,102 @@ finish:
 
     }
 
+    return eStatus;
+}
+
+//!
+//! \brief    Get Hdr path needed flag
+//! \details  Get Hdr path needed flag
+//! \param    pRenderParams
+//!           [in] Pointer to VPHAL render parameter
+//! \param    pRenderPassData
+//!           [in,out] Pointer to the VPHAL render pass data
+//! \return   MOS_STATUS
+//!           Return MOS_STATUS_SUCCESS if successful, otherwise failed
+//!
+MOS_STATUS VphalRenderer::GetHdrPathNeededFlag(
+    PVPHAL_RENDER_PARAMS    pRenderParams,
+    RenderpassData          *pRenderPassData)
+{
+    MOS_STATUS              eStatus;
+    uint32_t                uiIndex;
+    PVPHAL_SURFACE          pSrcSurface;
+    PVPHAL_SURFACE          pTargetSurface;
+    bool                    bToneMapping;
+    bool                    bBt2020Output;
+    bool                    bMultiLayerBt2020;
+
+    //--------------------------------------------
+    VPHAL_RENDER_CHK_NULL(pRenderParams);
+    VPHAL_RENDER_CHK_NULL(pRenderPassData);
+    VPHAL_RENDER_CHK_NULL(pRenderParams->pTarget[0]);
+    //--------------------------------------------
+
+    eStatus                     = MOS_STATUS_SUCCESS;
+    uiIndex                     = 0;
+    pSrcSurface                 = nullptr;
+    pTargetSurface              = nullptr;
+    bToneMapping                = false;
+    bBt2020Output               = false;
+    bMultiLayerBt2020           = false;
+
+    // Loop through the sources
+    for (uiIndex = 0;
+        uiIndex < VPHAL_MAX_SOURCES && uiIndex < pRenderParams->uSrcCount;
+        uiIndex++)
+    {
+        pSrcSurface = pRenderParams->pSrc[uiIndex];
+        if (pSrcSurface == nullptr)
+        {
+            continue;
+        }
+        pTargetSurface = pRenderParams->pTarget[0];
+
+        // Need to use HDR to process BT601/BT709->BT2020
+        if (IS_COLOR_SPACE_BT2020(pRenderParams->pTarget[0]->ColorSpace) &&
+            !IS_COLOR_SPACE_BT2020(pSrcSurface->ColorSpace))
+        {
+            bBt2020Output = true;
+        }
+
+        if ((pSrcSurface->pHDRParams && (pSrcSurface->pHDRParams->EOTF != VPHAL_HDR_EOTF_TRADITIONAL_GAMMA_SDR)) ||
+            (pTargetSurface->pHDRParams && (pTargetSurface->pHDRParams->EOTF != VPHAL_HDR_EOTF_TRADITIONAL_GAMMA_SDR)))
+        {
+            bToneMapping = true;
+        }
+
+        if (IS_COLOR_SPACE_BT2020(pSrcSurface->ColorSpace) && pRenderParams->uSrcCount > 1)
+        {
+            bMultiLayerBt2020 = true;
+        }
+    }
+
+    pRenderPassData->bHdrNeeded = bBt2020Output || bToneMapping || bMultiLayerBt2020;
+
+    // Error handling for illegal Hdr cases on unsupported m_Platform
+    if ((pRenderPassData->bHdrNeeded) && (!MEDIA_IS_SKU(m_pSkuTable, FtrHDR)))
+    {
+        eStatus = MOS_STATUS_SUCCESS;
+        VPHAL_RENDER_ASSERTMESSAGE("Illegal Hdr cases on unsupported m_Platform, turn off HDR.");
+        pRenderPassData->bHdrNeeded = false;
+    }
+
+    if (pRenderPassData->bHdrNeeded)
+    {
+        pRenderPassData->bCompNeeded = false;
+    }
+
+    if (!pRenderPassData->bHdrNeeded &&
+        pRenderParams->pSrc[0] &&
+        pRenderParams->pTarget[0] &&
+        IS_COLOR_SPACE_BT2020(pRenderParams->pSrc[0]->ColorSpace) &&
+        !IS_COLOR_SPACE_BT2020(pRenderParams->pTarget[0]->ColorSpace) &&
+        MEDIA_IS_SKU(m_pSkuTable, FtrDisableVEBoxFeatures))
+    {
+        eStatus = MOS_STATUS_INVALID_PARAMETER;
+        VPHAL_RENDER_ASSERTMESSAGE("Invalid Params for This Platform.");
+    }
+
+finish:
     return eStatus;
 }

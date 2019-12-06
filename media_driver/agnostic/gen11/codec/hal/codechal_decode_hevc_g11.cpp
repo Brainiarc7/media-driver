@@ -33,6 +33,7 @@
 #include "mhw_vdbox_mfx_g11_X.h"
 #include "mhw_vdbox_g11_X.h"
 #include "codechal_hw_g11_X.h"
+#include "hal_oca_interface.h"
 
 //==<Functions>=======================================================
 MOS_STATUS CodechalDecodeHevcG11::AllocateResourcesVariableSizes ()
@@ -238,6 +239,7 @@ MOS_STATUS CodechalDecodeHevcG11::SetFrameStates ()
 {
     MOS_STATUS eStatus = MOS_STATUS_SUCCESS;
 
+    PERF_UTILITY_AUTO(__FUNCTION__, PERF_DECODE, PERF_LEVEL_HAL);
     CODECHAL_DECODE_FUNCTION_ENTER;
 
     CODECHAL_DECODE_CHK_NULL_RETURN(m_decodeParams.m_destSurface);
@@ -260,7 +262,7 @@ MOS_STATUS CodechalDecodeHevcG11::SetFrameStates ()
 
     m_cencBuf = m_decodeParams.m_cencBuf;
     
-    if (m_firstExecuteCall)    // For DRC Multiple Execution Call, no need to update every value in pHevcState except first execute
+    if (IsFirstExecuteCall())    // For DRC Multiple Execution Call, no need to update every value in pHevcState except first execute
     {
         m_dataSize   = m_decodeParams.m_dataSize;
         m_dataOffset = m_decodeParams.m_dataOffset;
@@ -449,7 +451,7 @@ MOS_STATUS CodechalDecodeHevcG11::SetFrameStates ()
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_sfcState->CheckAndInitialize((CODECHAL_DECODE_PROCESSING_PARAMS *)m_decodeParams.m_procParams, m_hevcPicParams));
 #endif
     CODECHAL_DEBUG_TOOL(
-        if (!m_incompletePicture && !m_firstExecuteCall) {
+        if (!m_incompletePicture && !IsFirstExecuteCall()) {
             CODECHAL_DECODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
                 &m_resCopyDataBuffer,
                 CodechalDbgAttr::attrBitstream,
@@ -762,6 +764,7 @@ MOS_STATUS CodechalDecodeHevcG11::DecodeStateLevel()
 {
     MOS_STATUS eStatus = MOS_STATUS_SUCCESS;
 
+    PERF_UTILITY_AUTO(__FUNCTION__, PERF_DECODE, PERF_LEVEL_HAL);
     CODECHAL_DECODE_FUNCTION_ENTER;
 
     //HCP Decode Phase State Machine
@@ -917,6 +920,7 @@ MOS_STATUS CodechalDecodeHevcG11::SendPictureLongFormat()
 
     PMOS_COMMAND_BUFFER cmdBufferInUse = &primCmdBuffer;
     MOS_COMMAND_BUFFER  scdryCmdBuffer;
+    auto                mmioRegisters = m_hwInterface->GetMfxInterface()->GetMmioRegisters(m_vdboxIndex);
 
     if (CodecHalDecodeScalabilityIsScalableMode(m_scalabilityState) && MOS_VE_SUPPORTED(m_osInterface))
     {
@@ -931,6 +935,12 @@ MOS_STATUS CodechalDecodeHevcG11::SendPictureLongFormat()
             //send prolog at the start of a secondary cmd buffer
             CODECHAL_DECODE_CHK_STATUS_RETURN(SendPrologWithFrameTracking(cmdBufferInUse, false));
         }
+
+        HalOcaInterface::On1stLevelBBStart(scdryCmdBuffer, *m_osInterface->pOsContext, m_osInterface->CurrentGpuContextHandle, *m_miInterface, *mmioRegisters);
+    }
+    else
+    {
+        HalOcaInterface::On1stLevelBBStart(primCmdBuffer, *m_osInterface->pOsContext, m_osInterface->CurrentGpuContextHandle, *m_miInterface, *mmioRegisters);
     }
 
     CODECHAL_DECODE_CHK_STATUS_RETURN(InitPicLongFormatMhwParams());
@@ -1529,7 +1539,7 @@ MOS_STATUS CodechalDecodeHevcG11::DecodePrimitiveLevel()
             decodeStatusReport.m_currDecodedPicRes  = m_hevcRefList[m_hevcPicParams->CurrPic.FrameIdx]->resRefPic;
 #ifdef _DECODE_PROCESSING_SUPPORTED
             CODECHAL_DEBUG_TOOL(
-                if (m_downsampledSurfaces) {
+                if (m_downsampledSurfaces && m_sfcState && m_sfcState->m_sfcOutputSurface) {
                     m_downsampledSurfaces[m_hevcPicParams->CurrPic.FrameIdx].OsResource =
                         m_sfcState->m_sfcOutputSurface->OsResource;
                     decodeStatusReport.m_currSfcOutputPicRes =
@@ -1620,8 +1630,12 @@ MOS_STATUS CodechalDecodeHevcG11::DecodePrimitiveLevel()
     if (MOS_VE_SUPPORTED(m_osInterface) && CodecHalDecodeScalabilityIsScalableMode(m_scalabilityState))
     {
         submitCommand = CodecHalDecodeScalabilityIsToSubmitCmdBuffer(m_scalabilityState);
+        HalOcaInterface::On1stLevelBBEnd(scdryCmdBuffer, *m_osInterface->pOsContext);
     }
-
+    else
+    {
+        HalOcaInterface::On1stLevelBBEnd(primCmdBuffer, *m_osInterface->pOsContext);
+    }
     if (submitCommand || m_osInterface->phasedSubmission)
     {
         //command buffer to submit is the primary cmd buffer.

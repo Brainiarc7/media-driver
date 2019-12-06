@@ -321,7 +321,8 @@ public:
 
     virtual MOS_STATUS SendPrologWithFrameTracking(
         PMOS_COMMAND_BUFFER         cmdBuffer,
-        bool                        frameTracking);
+        bool                        frameTracking,
+        MHW_MI_MMIOREGISTERS       *mmioRegister = nullptr);
 
     virtual MOS_STATUS ExecutePictureLevel();
 
@@ -553,14 +554,6 @@ public:
     //!
     //! \brief    Sort and set distinct delta QPs
     //!
-    //! \param    [in] numRoi
-    //!           Number of ROI
-    //! \param    [in] roiRegions
-    //!           ROI regions
-    //! \param    [in] numDistinctDeltaQp
-    //!           number of distinct delta QPs
-    //! \param    [in] roiDistinctDeltaQp
-    //!           data of distinct delta QPs
     //! \return   bool
     //!           true if native ROI, otherwise false
     //!
@@ -858,6 +851,7 @@ protected:
     MOS_RESOURCE                                m_vdencIntraRowStoreScratchBuffer; //!< Handle of intra row store surface
     MOS_RESOURCE                                m_pakStatsBuffer;                  //!< Handle of PAK status buffer
     MOS_RESOURCE                                m_vdencStatsBuffer;                //!< Handle of VDEnc status buffer
+    MOS_RESOURCE                                m_vdencColocatedMVBuffer;           //!< Handle of colocated MV buffer
     MOS_RESOURCE                                m_vdencTlbMmioBuffer;              //!< VDEnc TLB MMIO buffer
 
     uint32_t                                    m_mmioMfxLra0Override = 0;         //!< Override Register MFX_LRA_0
@@ -933,6 +927,7 @@ protected:
     bool                                m_forceToSkipEnable;                                            //!< Force to Skip Flag.
     uint32_t                            m_vdencBrcInitDmemBufferSize;                                   //!< Brc Init-Dmem Buffer Size.
     uint32_t                            m_vdencBrcUpdateDmemBufferSize;                                 //!< Brc Update-Dmem Buffer Size.
+    uint32_t                            m_vdencColocatedMVBufferSize;                                     //!< Colocated MV Read / Write Buffer Size.
     bool                                m_vdencStaticFrame;                                             //!< Static Frame Indicator.
     uint32_t                            m_vdencStaticRegionPct;                                         //!< Ratio of Static Region in One Frame.
     bool                                m_oneOnOneMapping = false;                                      //!< Indicate if one on one ref index mapping is enabled
@@ -945,9 +940,8 @@ protected:
 
     static constexpr uint8_t m_maxNumRoi       = 16;  //!< VDEnc maximum number of ROI supported
     static constexpr uint8_t m_maxNumNativeRoi = 3;   //!< Number of native ROI supported by VDEnc HW
-    int8_t                   roiDistinctDeltaQp[m_maxNumRoi];
 
-private:
+protected:
 
     static const uint32_t AVC_I_SLICE_SIZE_MINUS = 500;                                    //!< VDENC I SLICE threshold
     static const uint32_t AVC_P_SLICE_SIZE_MINUS = 500;                                    //!< VDENC P SLICE threshold

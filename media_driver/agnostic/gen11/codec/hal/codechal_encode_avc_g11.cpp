@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2011-2017, Intel Corporation
+* Copyright (c) 2011-2019, Intel Corporation
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -30,6 +30,7 @@
 #include "codechal_encode_wp_g11.h"
 #include "codechal_kernel_header_g11.h"
 #include "codechal_kernel_hme_g11.h"
+#include "hal_oca_interface.h"
 #ifndef _FULL_OPEN_SOURCE
 #include "igcodeckrn_g11.h"
 #endif
@@ -3032,7 +3033,7 @@ public:
             uint32_t   CurrFrameType                               : MOS_BITFIELD_RANGE(  0, 7 );
             uint32_t   EnableROI                                   : MOS_BITFIELD_RANGE(  8,15 );
             uint32_t   ROIRatio                                    : MOS_BITFIELD_RANGE( 16,23 );
-            uint32_t   Reserved                                    : MOS_BITFIELD_RANGE( 24,31 );
+            uint32_t   CQP_QPValue                                 : MOS_BITFIELD_RANGE( 24,31 );
         };
         struct
         {
@@ -3044,7 +3045,8 @@ public:
     {
         struct
         {
-            uint32_t   Reserved;
+            uint32_t   EnableCQPMode                               : MOS_BITFIELD_RANGE(  0, 7 );
+            uint32_t   Reserved                                    : MOS_BITFIELD_RANGE(  8,31 );
         };
         struct
         {
@@ -4586,6 +4588,7 @@ MOS_STATUS CodechalEncodeAvcEncG11::MbEncKernel(bool mbEncIFrameDistInUse)
 
         if ((!m_singleTaskPhaseSupported || m_lastTaskInPhase))
         {
+            HalOcaInterface::On1stLevelBBEnd(cmdBuffer, *m_osInterface->pOsContext);
             m_osInterface->pfnSubmitCommandBuffer(m_osInterface, &cmdBuffer, m_renderContextUsesNullHw);
             m_lastTaskInPhase = false;
         }
@@ -4902,6 +4905,7 @@ MOS_STATUS CodechalEncodeAvcEncG11::ExecuteSliceLevel()
     if (!m_singleTaskPhaseSupported || m_lastTaskInPhase)
     {
         CODECHAL_ENCODE_CHK_STATUS_RETURN(SetAndPopulateVEHintParams(&cmdBuffer));
+        HalOcaInterface::On1stLevelBBEnd(cmdBuffer, *m_osInterface->pOsContext);
         CODECHAL_ENCODE_CHK_STATUS_RETURN(m_osInterface->pfnSubmitCommandBuffer(m_osInterface, &cmdBuffer, renderingFlags));
 
         CODECHAL_DEBUG_TOOL(
@@ -5017,7 +5021,7 @@ MOS_STATUS CodechalEncodeAvcEncG11::ExecuteKernelFunctions()
     }
 
     // BRC init/reset needs to be called before HME since it will reset the Brc Distortion surface
-    if (bBrcEnabled && (bBrcInit || bBrcReset))
+    if ((bBrcEnabled || m_avcPicParam->bEnableQpAdjustment) && (bBrcInit || bBrcReset))
     {
         bool cscEnabled = m_cscDsState->RequireCsc() && m_firstField;
         m_lastTaskInPhase = !(cscEnabled || m_scalingEnabled || m_16xMeSupported || m_hmeEnabled || swScoreboardInitNeeded);
@@ -5158,6 +5162,13 @@ MOS_STATUS CodechalEncodeAvcEncG11::ExecuteKernelFunctions()
         {
             CODECHAL_ENCODE_CHK_STATUS_RETURN(BrcMbUpdateKernel());
         }
+
+        // Reset buffer ID used for BRC kernel performance reports
+        m_osInterface->pfnResetPerfBufferID(m_osInterface);
+    }
+    else if (bMbBrcEnabled)
+    {
+        CODECHAL_ENCODE_CHK_STATUS_RETURN(BrcMbUpdateKernel());
 
         // Reset buffer ID used for BRC kernel performance reports
         m_osInterface->pfnResetPerfBufferID(m_osInterface);
@@ -5350,7 +5361,7 @@ MOS_STATUS CodechalEncodeAvcEncG11::ExecuteKernelFunctions()
         if (bBrcEnabled)
         {
             CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
-                &BrcBuffers.resBrcImageStatesReadBuffer[m_currRecycledBufIdx],
+                &BrcBuffers.resBrcImageStatesWriteBuffer,
                 CodechalDbgAttr::attrOutput,
                 "ImgStateWrite",
                 BRC_IMG_STATE_SIZE_PER_PASS * m_hwInterface->GetMfxInterface()->GetBrcNumPakPasses(),
@@ -5367,12 +5378,12 @@ MOS_STATUS CodechalEncodeAvcEncG11::ExecuteKernelFunctions()
             if (!Mos_ResourceIsNull(&BrcBuffers.sBrcMbQpBuffer.OsResource))
             {
                 CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
-                    &BrcBuffers.resBrcPakStatisticBuffer[m_brcPakStatisticsSize],
+                    &BrcBuffers.sBrcMbQpBuffer.OsResource,
                     CodechalDbgAttr::attrOutput,
                     "MbQp",
-                    BrcBuffers.dwBrcMbQpBottomFieldOffset,
                     BrcBuffers.sBrcMbQpBuffer.dwPitch*BrcBuffers.sBrcMbQpBuffer.dwHeight,
-                    CODECHAL_MEDIA_STATE_BRC_UPDATE));
+                    BrcBuffers.dwBrcMbQpBottomFieldOffset,
+                    CODECHAL_MEDIA_STATE_MB_BRC_UPDATE));
             }
             if (BrcBuffers.pMbEncKernelStateInUse)
             {
@@ -6143,6 +6154,7 @@ MOS_STATUS CodechalEncodeAvcEncG11::SetCurbeAvcMbEnc(PCODECHAL_ENCODE_AVC_MBENC_
     auto slcParams = params->pSlcParams;
 
     MHW_VDBOX_AVC_SLICE_STATE sliceState;
+    MOS_ZeroMemory(&sliceState, sizeof(sliceState));
     sliceState.pEncodeAvcSeqParams = seqParams;
     sliceState.pEncodeAvcPicParams = picParams;
     sliceState.pEncodeAvcSliceParams = slcParams;
@@ -6908,7 +6920,8 @@ MOS_STATUS CodechalEncodeAvcEncG11::SetCurbeAvcFrameBrcUpdate(PCODECHAL_ENCODE_A
     auto picParams = m_avcPicParam;
     auto slcParams = m_avcSliceParams;
 
-    MHW_VDBOX_AVC_SLICE_STATE                       sliceState;
+    MHW_VDBOX_AVC_SLICE_STATE sliceState;
+    MOS_ZeroMemory(&sliceState, sizeof(sliceState));
     sliceState.pEncodeAvcSeqParams = seqParams;
     sliceState.pEncodeAvcPicParams = picParams;
     sliceState.pEncodeAvcSliceParams = slcParams;
@@ -7065,6 +7078,12 @@ MOS_STATUS CodechalEncodeAvcEncG11::SetCurbeAvcMbBrcUpdate(PCODECHAL_ENCODE_AVC_
     else
     {
         curbe.m_dw0.ROIRatio = 0;
+    }
+
+    if (m_avcPicParam->bEnableQpAdjustment)
+    {
+        curbe.m_dw0.CQP_QPValue = MOS_MIN(m_avcPicParam->QpY + m_avcSliceParams->slice_qp_delta, 51);
+        curbe.m_dw1.EnableCQPMode = 1;
     }
 
     curbe.m_dw8.HistorybufferIndex        = mbBrcUpdateHistory;
@@ -8130,7 +8149,8 @@ MOS_STATUS CodechalEncodeAvcEncG11::SetupROISurface()
 
 MOS_STATUS CodechalEncodeAvcEncG11::SendPrologWithFrameTracking(
     PMOS_COMMAND_BUFFER         cmdBuffer,
-    bool                        frameTracking)
+    bool                        frameTracking,
+    MHW_MI_MMIOREGISTERS       *mmioRegister)
 {
     if (MOS_VE_SUPPORTED(m_osInterface))
     {
@@ -8143,7 +8163,7 @@ MOS_STATUS CodechalEncodeAvcEncG11::SendPrologWithFrameTracking(
         }
     }
 
-    return CodechalEncodeAvcEnc::SendPrologWithFrameTracking(cmdBuffer, frameTracking);
+    return CodechalEncodeAvcEnc::SendPrologWithFrameTracking(cmdBuffer, frameTracking, mmioRegister);
 }
 
 MOS_STATUS CodechalEncodeAvcEncG11::InitKernelStateMe()

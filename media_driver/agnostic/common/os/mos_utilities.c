@@ -42,6 +42,8 @@
 #include <time.h>     //for simulate random memory allcation failure
 #endif
 
+#define Mos_SwizzleOffset __Mos_SwizzleOffset
+
 #ifdef _MOS_UTILITY_EXT
 #include "mos_utilities_ext.h"
 #endif
@@ -78,6 +80,20 @@ PerfUtility::~PerfUtility()
     records.clear();
 }
 
+void PerfUtility::setupFilePath(char *perfFilePath)
+{
+    MOS_SecureStrcpy(sSummaryFileName, MOS_MAX_PERF_FILENAME_LEN, perfFilePath);
+    MOS_SecureStrcat(sSummaryFileName, MOS_MAX_PERF_FILENAME_LEN, "perf_sumamry.csv");
+    MOS_SecureStrcpy(sDetailsFileName, MOS_MAX_PERF_FILENAME_LEN, perfFilePath);
+    MOS_SecureStrcat(sDetailsFileName, MOS_MAX_PERF_FILENAME_LEN, "perf_details.txt");
+}
+
+void PerfUtility::setupFilePath()
+{
+    MOS_SecureStrcpy(sSummaryFileName, MOS_MAX_PERF_FILENAME_LEN, "perf_sumamry.csv");
+    MOS_SecureStrcpy(sDetailsFileName, MOS_MAX_PERF_FILENAME_LEN, "perf_details.txt");
+}
+
 void PerfUtility::savePerfData()
 {
     printPerfSummary();
@@ -88,18 +104,17 @@ void PerfUtility::savePerfData()
 void PerfUtility::printPerfSummary()
 {
     std::ofstream fout;
-    fout.open("perf_summary.csv");
+    fout.open(sSummaryFileName);
 
     printHeader(fout);
     printBody(fout);
-
     fout.close();
 }
 
 void PerfUtility::printPerfDetails()
 {
     std::ofstream fout;
-    fout.open("perf_details.txt");
+    fout.open(sDetailsFileName);
 
     for (auto data : records)
     {
@@ -321,6 +336,15 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_UINT32,
         "0",
         "Performance Profiler Timer Register"),
+        MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_PERF_PROFILER_ENABLE_MULTI_PROCESS,
+        "Perf Profiler Multi Process Support",
+        __MEDIA_USER_FEATURE_SUBKEY_PERFORMANCE,
+        __MEDIA_USER_FEATURE_SUBKEY_REPORT,
+        "General",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_UINT32,
+        "0",
+        "Performance Profiler Multi Process Support"),
     MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_PERF_PROFILER_REGISTER_1,
         "Perf Profiler Register 1",
         __MEDIA_USER_FEATURE_SUBKEY_PERFORMANCE,
@@ -418,7 +442,7 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         "General",
         MOS_USER_FEATURE_TYPE_USER,
         MOS_USER_FEATURE_VALUE_TYPE_BOOL,
-        "0",
+        "1",
         "Switches between 1-16K and 0-64K Granularity for Aux Table."),
     MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_MFE_MBENC_ENABLE_ID,
         "MFE MBEnc Enable",
@@ -429,6 +453,15 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_INT32,
         "1",
         "Enables/Disables MFE MBEnc Mode. This feature is only enabled for AVC encode."),
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_MFE_FIRST_BUFFER_SUBMIT_ID,
+        "MFE First Buffer Submit",
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_REPORT,
+        "Encode",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_INT32,
+        "0",
+        "Used to indicate MFE work on UMD level"),
     MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_RC_PANIC_ENABLE_ID,
         "RC Panic Mode",
         __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
@@ -1347,7 +1380,7 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_INT32,
         "0",
         "Enable Codec MMCD. (0: Disable codec MMCD; other values: enable codec MMCD)."),
-    MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_DECODE_MMC_ENABLE_ID,
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_DECODE_MMC_ENABLE_ID,
         "Enable Decode MMC",
         __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
         __MEDIA_USER_FEATURE_SUBKEY_REPORT,
@@ -1356,7 +1389,7 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_INT32,
         "0",
         "Enable Decode MMCD. (0: Disable decode MMCD; other values: enable decode MMCD)."),
-    MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_ENCODE_MMC_ENABLE_ID,
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_ENCODE_MMC_ENABLE_ID,
         "Enable Encode MMC",
         __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
         __MEDIA_USER_FEATURE_SUBKEY_REPORT,
@@ -1766,6 +1799,16 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         "Path where command info will be dumped, for example: ./"),
 #endif // MOS_COMMAND_RESINFO_DUMP_SUPPORTED
 #if (_DEBUG || _RELEASE_INTERNAL)
+    MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_MHW_BASE_VDENC_INTERFACE_ID,
+        "Use Mhw Base Vdenc Interface",
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_REPORT,
+        "MOS",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_INT32,
+        "0",
+        "Mhw Base Vdenc Interface Active Flag"),
+
     MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_MEDIA_PREEMPTION_ENABLE_ID,
         "Media Preemption Enable",
         __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
@@ -1805,6 +1848,16 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_INT32,
         "5",
         "Override MOCS index value in MDF"),
+
+    MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_MDF_FORCE_RAMODE,
+        "MDF Force RAMode",
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_REPORT,
+        "Media",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_INT32,
+        "0",
+        "Force GPU context be created in RAMode"),
 
     MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_GROUP_ID_ID,
         "Group ID",
@@ -2637,6 +2690,15 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_UINT32,
         "0",
         "Enable MDF UMD ULT"),
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_MDF_CMD_DUMP_ENABLE_ID,
+        __MEDIA_USER_FEATURE_VALUE_MDF_CMD_DUMP_ENABLE,
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_REPORT,
+        "MDF",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_UINT32,
+        "0",
+        "Enable MDF Command buffer Dump"),
     MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_MDF_CURBE_DUMP_ENABLE_ID,
         __MEDIA_USER_FEATURE_VALUE_MDF_CURBE_DUMP_ENABLE,
         __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
@@ -2709,6 +2771,33 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_STRING,
         "",
         "MDF dump path specified by user"),
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_MDF_FORCE_EXECUTION_PATH_ID,
+        __MEDIA_USER_FEATURE_VALUE_MDF_FORCE_EXECUTION_PATH,
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        "MDF",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_UINT32,
+        "0",
+        "MDF execution path specified by user"),
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_MDF_MAX_THREAD_NUM_ID,
+        __MEDIA_USER_FEATURE_VALUE_MDF_MAX_THREAD_NUM,
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        "MDF",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_UINT32,
+        "0",
+        "MDF maximun thread number specified by user"),
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_MDF_FORCE_COHERENT_STATELESSBTI_ID,
+        __MEDIA_USER_FEATURE_VALUE_MDF_FORCE_COHERENT_STATELESSBTI,
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        "MDF",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_UINT32,
+        "0",
+        "MDF coherent stateless BTI specified by user"),
     MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_MDF_EMU_MODE_ENABLE_ID,
         __MEDIA_USER_FEATURE_VALUE_MDF_EMU_MODE_ENABLE,
         __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
@@ -3008,7 +3097,7 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_UINT32,
         "0",
         "Super Resolution Mode. 1: FP32, 2: Hibrid, 3: FP16."),
-    MOS_DECLARE_UF_KEY_DBGONLY(__VPHAL_ENABLE_VEBOX_MMC_DECOMPRESS_ID,
+    MOS_DECLARE_UF_KEY(__VPHAL_ENABLE_VEBOX_MMC_DECOMPRESS_ID,
         "Enable Vebox Decompress",
         __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
         __MEDIA_USER_FEATURE_SUBKEY_REPORT,
@@ -3024,7 +3113,7 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         "VP",
         MOS_USER_FEATURE_TYPE_USER,
         MOS_USER_FEATURE_VALUE_TYPE_BOOL,
-        "1",
+        "0",
         "Enable memory compression"),
     MOS_DECLARE_UF_KEY(__VPHAL_ENABLE_MMC_IN_USE_ID,
         "VP MMC In Use",
@@ -3071,14 +3160,14 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_BOOL,
         "0",
         "VP render target compressible"),
-    MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_ENABLE_RENDER_ENGINE_MMC_ID,
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_ENABLE_RENDER_ENGINE_MMC_ID,
         "Enable Media RenderEngine MMC",
         __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
         __MEDIA_USER_FEATURE_SUBKEY_REPORT,
         "VP",
         MOS_USER_FEATURE_TYPE_USER,
         MOS_USER_FEATURE_VALUE_TYPE_BOOL,
-        "1",
+        "0",
         "Enable media render engine memory compression in media workload"),
     MOS_DECLARE_UF_KEY_DBGONLY(__VPHAL_VEBOX_DISABLE_TEMPORAL_DENOISE_FILTER_ID,
         "Disable Temporal Denoise Filter",
@@ -3483,6 +3572,15 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         MOS_USER_FEATURE_VALUE_TYPE_INT32,
         "0",
         "Eanble Apogeios path. 1: enable, 0: disable."),
+    MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_VPP_APOGEIOS_ENABLE_ID,
+        "VP Apogeios Enabled",
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_REPORT,
+        "VP",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_INT32,
+        "0",
+        "Eanble Apogeios path in VP PipeLine. 1: enabled, 0: disabled."),
     MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_ENABLE_UMD_OCA_ID,
        __MEDIA_USER_FEATURE_VALUE_ENABLE_UMD_OCA,
        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
@@ -3553,7 +3651,7 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
         "Encode",
         MOS_USER_FEATURE_TYPE_USER,
         MOS_USER_FEATURE_VALUE_TYPE_INT32,
-        "0",
+        "1",
         "Encode Enable SW Back Annotation."),
 #if (_DEBUG || _RELEASE_INTERNAL)
     MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_ALLOC_MEMORY_FAIL_SIMULATE_MODE_ID,
@@ -3592,7 +3690,34 @@ static MOS_USER_FEATURE_VALUE MOSUserFeatureDescFields[__MOS_USER_FEATURE_KEY_MA
        MOS_USER_FEATURE_TYPE_USER,
        MOS_USER_FEATURE_VALUE_TYPE_UINT32,
        "0",
-       "Enable Perf Utility Tool. ")
+       "Enable Perf Utility Tool. "),
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_PERF_OUTPUT_DIRECTORY_ID,
+        __MEDIA_USER_FEATURE_VALUE_PERF_OUTPUT_DIRECTORY,
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        "MOS",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_STRING,
+        "",
+        " Perf Utility Tool Customize Output Directory. "),
+    MOS_DECLARE_UF_KEY(__MEDIA_USER_FEATURE_VALUE_APO_MOS_PATH_ENABLE_ID,
+        "ApoMosEnable",
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_REPORT,
+        "MOS",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_UINT32,
+        "0",
+        "Eanble mos Apogeios path. 1: enable, 0: disable."),
+    MOS_DECLARE_UF_KEY_DBGONLY(__MEDIA_USER_FEATURE_VALUE_APOGEIOS_HEVCD_ENABLE_ID,
+        "ApogeiosHevcdEnable",
+        __MEDIA_USER_FEATURE_SUBKEY_INTERNAL,
+        __MEDIA_USER_FEATURE_SUBKEY_REPORT,
+        "Codec",
+        MOS_USER_FEATURE_TYPE_USER,
+        MOS_USER_FEATURE_VALUE_TYPE_INT32,
+        "0",
+        "Eanble Apogeios hevc decode path. 1: enable, 0: disable."),
 };
 
 #define MOS_NUM_USER_FEATURE_VALUES     (sizeof(MOSUserFeatureDescFields) / sizeof(MOSUserFeatureDescFields[0]))
@@ -3835,7 +3960,10 @@ void MOS_Free_UserFeatureValueString(PMOS_USER_FEATURE_VALUE_STRING pUserString)
     {
         if (pUserString->uSize > 0)
         {
-            MOS_FreeMemAndSetNull(pUserString->pStringData);
+            if (pUserString->pStringData)
+            {
+                MOS_FreeMemAndSetNull(pUserString->pStringData);
+            }
             pUserString->uSize = 0;
         }
     }
@@ -4855,10 +4983,13 @@ MOS_STATUS MOS_AssignUserFeatureValueData(
         pDstData->MultiStringData.uMaxSize = MOS_USER_CONTROL_MAX_DATA_SIZE;
         pDstData->MultiStringData.pStrings = (PMOS_USER_FEATURE_VALUE_STRING)MOS_AllocAndZeroMemory(sizeof(MOS_USER_FEATURE_VALUE_STRING) * __MAX_MULTI_STRING_COUNT);
         if (pDstData->MultiStringData.pStrings == nullptr)
-              {
-                    MOS_OS_ASSERTMESSAGE("Failed to allocate memory.");
-                    return MOS_STATUS_NULL_POINTER;
-              }
+        {
+            MOS_OS_ASSERTMESSAGE("Failed to allocate memory.");
+            pDstData->MultiStringData.pMultStringData = nullptr;
+            pDstData->MultiStringData.uSize = 0;
+            pDstData->MultiStringData.uCount = 0;
+            return MOS_STATUS_NULL_POINTER;
+        }
         if ((pData != nullptr) && (strlen(pData) != 0))
         {
             MOS_SafeFreeMemory(pDstData->MultiStringData.pMultStringData);

@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2017, Intel Corporation
+* Copyright (c) 2017-2019, Intel Corporation
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -399,11 +399,13 @@ MOS_STATUS CodechalDebugInterface::DumpMDFCurbe(
     }
 
     std::string funcName = m_configMgr->GetMediaStateStr(mediaState);
+    bool binaryDump = m_configMgr->AttrIsEnabled(CodechalDbgAttr::attrDumpBufferInBinary);
+    const char* extType = binaryDump ? CodechalDbgExtType::dat : CodechalDbgExtType::txt;
 
     const char *fileName = CreateFileName(
         funcName.c_str(),
         CodechalDbgBufferType::bufCurbe,
-        CodechalDbgExtType::txt);
+        extType);
 
     curbeAlignedSize = MOS_ALIGN_CEIL(curbeSize, 64);
     curbeAlignedData = (uint8_t *)malloc(curbeAlignedSize * sizeof(uint8_t));
@@ -416,7 +418,14 @@ MOS_STATUS CodechalDebugInterface::DumpMDFCurbe(
     MOS_ZeroMemory(curbeAlignedData, curbeAlignedSize);
     MOS_SecureMemcpy(curbeAlignedData, curbeSize, curbeBuffer, curbeSize);
 
-    eStatus = DumpBufferInHexDwords(curbeAlignedData, curbeAlignedSize);
+    if (binaryDump)
+    {
+        eStatus = DumpBufferInBinary(curbeAlignedData, curbeAlignedSize);
+    }
+    else
+    {
+        eStatus = DumpBufferInHexDwords(curbeAlignedData, curbeAlignedSize);
+    }
 
     free(curbeAlignedData);
 
@@ -489,7 +498,9 @@ MOS_STATUS CodechalDebugInterface::DumpYUVSurface(
     PMOS_SURFACE              surface,
     const char *              attrName,
     const char *              surfName,
-    CODECHAL_MEDIA_STATE_TYPE mediaState)
+    CODECHAL_MEDIA_STATE_TYPE mediaState,
+    uint32_t                  width_in,
+    uint32_t                  height_in)
 {
     if (!DumpIsEnabled(attrName, mediaState))
     {
@@ -502,19 +513,29 @@ MOS_STATUS CodechalDebugInterface::DumpYUVSurface(
     lockFlags.TiledAsTiled = 1; // Bypass GMM CPU blit due to some issues in GMM CpuBlt function
 
     uint8_t *lockedAddr = (uint8_t *)m_osInterface->pfnLockResource(m_osInterface, &surface->OsResource, &lockFlags);
+    CODECHAL_DEBUG_CHK_NULL(lockedAddr)
 
     // Always use MOS swizzle instead of GMM Cpu blit
     uint32_t sizeMain = (uint32_t)(surface->OsResource.pGmmResInfo->GetSizeMainSurface());
     uint8_t *surfBaseAddr = (uint8_t*)MOS_AllocMemory(sizeMain);
-
     CODECHAL_DEBUG_CHK_NULL(surfBaseAddr);
+
+    if (DumpIsEnabled(CodechalDbgAttr::attrForceYUVDumpWithMemcpy))
+    {
+        MOS_SecureMemcpy(surfBaseAddr, sizeMain, lockedAddr, sizeMain); // Firstly, copy to surfBaseAddr to faster unlock resource
+        m_osInterface->pfnUnlockResource(m_osInterface, &surface->OsResource);
+        lockedAddr = surfBaseAddr;
+        surfBaseAddr = (uint8_t*)MOS_AllocMemory(sizeMain);
+        CODECHAL_DEBUG_CHK_NULL(surfBaseAddr);
+    }
+
     Mos_SwizzleData(lockedAddr, surfBaseAddr, surface->TileType, MOS_TILE_LINEAR, sizeMain / surface->dwPitch, surface->dwPitch, 0);
 
     uint8_t *data = surfBaseAddr;
     data += surface->dwOffset + surface->YPlaneOffset.iYOffset * surface->dwPitch;
-    
-    uint32_t width  = surface->dwWidth;
-    uint32_t height = surface->dwHeight;
+
+    uint32_t width  = width_in ? width_in : surface->dwWidth;
+    uint32_t height = height_in? height_in : surface->dwHeight;
 
     switch (surface->Format)
     {
@@ -640,11 +661,15 @@ uint8_t *vPlaneData = surfBaseAddr;
 
     ofs.close();
 
-    if (surfBaseAddr)
+    if (DumpIsEnabled(CodechalDbgAttr::attrForceYUVDumpWithMemcpy))
+    {
+        MOS_FreeMemory(lockedAddr);
+    }
+    else
     {
         m_osInterface->pfnUnlockResource(m_osInterface, &surface->OsResource);
-        MOS_FreeMemory(surfBaseAddr);
     }
+    MOS_FreeMemory(surfBaseAddr);
 
     return MOS_STATUS_SUCCESS;
 }

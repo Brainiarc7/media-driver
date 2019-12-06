@@ -59,6 +59,7 @@ void VphalFeatureReport::InitReportValue()
     CompositionMode     =   VPHAL_NO_COMPOSITION;
     DiScdMode           =   false;
     VEFeatureInUse      =   false;
+    HDRMode             =   VPHAL_HDR_MODE_NONE;
 }
 
 //!
@@ -771,7 +772,7 @@ MOS_STATUS VphalState::GetStatusReport(
     // eNullRender = m_pOsInterface->pfnGetNullHWRenderFlags(m_pOsInterface);
 
     pOsContext           = m_osInterface->pOsContext;
-    pStatusTable         = &m_renderer->StatusTable;
+    pStatusTable         = &m_statusTable;
     uiNewHead            = pStatusTable->uiHead; // uiNewHead start from previous head value
     // entry length from head to tail
     uiTableLen           = (pStatusTable->uiCurrent - pStatusTable->uiHead) & (VPHAL_STATUS_TABLE_MAX_SIZE - 1);
@@ -786,6 +787,13 @@ MOS_STATUS VphalState::GetStatusReport(
         uiIndex            = (pStatusTable->uiHead + i) & (VPHAL_STATUS_TABLE_MAX_SIZE - 1);
         pStatusEntry       = &pStatusTable->aTableEntries[uiIndex];
 
+        // for tasks using CM, different streamIndexes may be used
+        uint32_t oldStreamIndex = m_osInterface->streamIndex;
+        if (pStatusEntry->isStreamIndexSet)
+        {
+            m_osInterface->streamIndex = pStatusEntry->streamIndex;
+        }
+
         if (bMarkNotReadyForRemains)
         {
             // the status is set as VPREP_NOTREADY while submitting commands
@@ -793,6 +801,7 @@ MOS_STATUS VphalState::GetStatusReport(
             pQueryReport[i].StatusFeedBackID = pStatusEntry->StatusFeedBackID;
             continue;
         }
+
 #if (LINUX || ANDROID)
         dwGpuTag           = pOsContext->GetGPUTag(m_osInterface, pStatusEntry->GpuContextOrdinal);
 #else
@@ -836,6 +845,11 @@ MOS_STATUS VphalState::GetStatusReport(
 
         pQueryReport[i].dwStatus         = pStatusEntry->dwStatus;
         pQueryReport[i].StatusFeedBackID = pStatusEntry->StatusFeedBackID;
+
+        if (pStatusEntry->isStreamIndexSet)
+        {
+            m_osInterface->streamIndex = oldStreamIndex;
+        }
     }
     pStatusTable->uiHead = uiNewHead;
 
@@ -869,10 +883,9 @@ MOS_STATUS VphalState::GetStatusReportEntryLength(
 #if(!EMUL)        // this function is dummy for emul
     PVPHAL_STATUS_TABLE            pStatusTable;
 
-    VPHAL_PUBLIC_CHK_NULL(m_renderer);
     VPHAL_PUBLIC_CHK_NULL(puiLength);
 
-    pStatusTable = &m_renderer->StatusTable;
+    pStatusTable = &m_statusTable;
 
     // entry length from head to tail
     *puiLength = (pStatusTable->uiCurrent - pStatusTable->uiHead) & (VPHAL_STATUS_TABLE_MAX_SIZE - 1);

@@ -28,6 +28,7 @@
 #include "codechal_decoder.h"
 #include "codechal_decode_vp8_g11.h"
 #include "mhw_vdbox_mfx_g11_X.h"
+#include "hal_oca_interface.h"
 
 CodechalDecodeVp8G11::~CodechalDecodeVp8G11()
 {
@@ -110,13 +111,37 @@ MOS_STATUS CodechalDecodeVp8G11::DecodeStateLevel()
     }
     else
     {
-        m_presLastRefSurface   = &(vp8RefList[lastRefPicIndex]->resRefPic);
-        m_presGoldenRefSurface = &(vp8RefList[goldenRefPicIndex]->resRefPic);
-        m_presAltRefSurface    = &(vp8RefList[altRefPicIndex]->resRefPic);
+        if((Mos_ResourceIsNull(&vp8RefList[m_vp8PicParams->ucLastRefPicIndex]->resRefPic)) && (m_presLastRefSurface))
+        {
+            vp8RefList[m_vp8PicParams->ucLastRefPicIndex]->resRefPic = *m_presLastRefSurface;
+        }
+        else
+        {
+            m_presLastRefSurface   = &(vp8RefList[lastRefPicIndex]->resRefPic);
+        }
+        if((Mos_ResourceIsNull(&vp8RefList[m_vp8PicParams->ucGoldenRefPicIndex]->resRefPic)) && (m_presGoldenRefSurface))
+        {
+            vp8RefList[m_vp8PicParams->ucGoldenRefPicIndex]->resRefPic = *m_presGoldenRefSurface;
+        }
+        else
+        {
+            m_presGoldenRefSurface = &(vp8RefList[goldenRefPicIndex]->resRefPic);
+        }
+        if((Mos_ResourceIsNull(&vp8RefList[m_vp8PicParams->ucAltRefPicIndex]->resRefPic)) && (m_presAltRefSurface))
+        {
+            vp8RefList[m_vp8PicParams->ucAltRefPicIndex]->resRefPic = *m_presAltRefSurface;
+        }
+        else
+        {
+            m_presAltRefSurface    = &(vp8RefList[altRefPicIndex]->resRefPic);
+        }
     }
 
     MOS_COMMAND_BUFFER cmdBuffer;
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_osInterface->pfnGetCommandBuffer(m_osInterface, &cmdBuffer, 0));
+
+    auto mmioRegisters = m_hwInterface->GetMfxInterface()->GetMmioRegisters(m_vdboxIndex);
+    HalOcaInterface::On1stLevelBBStart(cmdBuffer, *m_osInterface->pOsContext, m_osInterface->CurrentGpuContextHandle, *m_miInterface, *mmioRegisters);
 
     MHW_VDBOX_PIPE_MODE_SELECT_PARAMS pipeModeSelectParams;
     pipeModeSelectParams.Mode               = m_mode;
@@ -143,7 +168,9 @@ MOS_STATUS CodechalDecodeVp8G11::DecodeStateLevel()
         pipeBufAddrParams.psPreDeblockSurface = destSurface;
     }
 
+#ifdef _MMC_SUPPORTED
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_mmc->SetPipeBufAddr(&pipeBufAddrParams));
+#endif
 
     // when there is no last, golden and alternate reference,
     // the index is set to the destination frame index
@@ -170,9 +197,11 @@ MOS_STATUS CodechalDecodeVp8G11::DecodeStateLevel()
         }
     }
 
+#ifdef _MMC_SUPPORTED
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_mmc->CheckReferenceList(&pipeBufAddrParams));
 
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_mmc->SetRefrenceSync(m_disableDecodeSyncLock, m_disableLockForTranscode));
+#endif
 
     MHW_VDBOX_IND_OBJ_BASE_ADDR_PARAMS indObjBaseAddrParams;
     MOS_ZeroMemory(&indObjBaseAddrParams, sizeof(indObjBaseAddrParams));
@@ -307,6 +336,9 @@ MOS_STATUS CodechalDecodeVp8G11::DecodePrimitiveLevel()
 
             m_huCCopyInUse = false;
     }
+
+
+    HalOcaInterface::On1stLevelBBEnd(cmdBuffer, *m_osInterface->pOsContext);
 
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_osInterface->pfnSubmitCommandBuffer(m_osInterface, &cmdBuffer, m_videoContextUsesNullHw));
 

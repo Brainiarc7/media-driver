@@ -313,8 +313,13 @@ int32_t CmProgramRT::Initialize( void* cisaCode, const uint32_t cisaCodeSize, co
     {
     //reg control for svm IA/GT cache coherence
 #if (_RELEASE_INTERNAL)
-        uint32_t value = 0;
-        if (ReadUserFeatureValue(CM_RT_USER_FEATURE_FORCE_COHERENT_STATELESSBTI, value) == CM_SUCCESS && value == 1)
+        MOS_USER_FEATURE_VALUE_DATA userFeatureData;
+        MOS_ZeroMemory(&userFeatureData, sizeof(userFeatureData));
+        MOS_UserFeature_ReadValue_ID(
+            nullptr,
+            __MEDIA_USER_FEATURE_VALUE_MDF_FORCE_COHERENT_STATELESSBTI_ID,
+            &userFeatureData);
+        if (userFeatureData.i32Data == 1)
         {
             jitFlags[numJitFlags] = CM_RT_JITTER_NCSTATELESS_FLAG;
             numJitFlags++;
@@ -687,6 +692,7 @@ int32_t CmProgramRT::Initialize( void* cisaCode, const uint32_t cisaCodeSize, co
     for (uint32_t i = 0; i < m_kernelCount; i++)
     {
         CM_KERNEL_INFO *kernelInfo = (CM_KERNEL_INFO *)m_kernelInfo.GetElement(i);
+        CM_CHK_NULL_GOTOFINISH_CMERROR(kernelInfo);
         // higher 32bit is the order of kernel in LoadProgram in the device
         // lower 32bit is the hash value of kernel info
         kernelInfo->hashValue = GetKernelInfoHash(kernelInfo) | ((uint64_t)m_device->KernelsLoaded() << 32);

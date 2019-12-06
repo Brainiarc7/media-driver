@@ -29,6 +29,7 @@
 #include "codechal_secure_decode_interface.h"
 #include "codechal_decode_vp9.h"
 #include "codechal_mmc_decode_vp9.h"
+#include "hal_oca_interface.h"
 #if USE_CODECHAL_DEBUG_TOOL
 #include <sstream>
 #include <fstream>
@@ -1073,7 +1074,7 @@ MOS_STATUS CodechalDecodeVp9 :: CheckAndCopyBitStream()
             (m_vp9PicParams->FrameWidthMinus1 + 1) * (m_vp9PicParams->FrameHeightMinus1 + 1) * 6;
     }
 
-    if (m_firstExecuteCall) // first exec call
+    if (IsFirstExecuteCall()) // first exec call
     {
         if (m_dataSize < m_vp9PicParams->BSBytesInBuffer)  // Current bitstream buffer is not big enough
         {
@@ -1143,6 +1144,7 @@ MOS_STATUS CodechalDecodeVp9::SetFrameStates ()
 {
     MOS_STATUS eStatus = MOS_STATUS_SUCCESS;
 
+    PERF_UTILITY_AUTO(__FUNCTION__, PERF_DECODE, PERF_LEVEL_HAL);
     CODECHAL_DECODE_FUNCTION_ENTER;
 
     CODECHAL_DECODE_CHK_NULL_RETURN(m_decodeParams.m_destSurface);
@@ -1163,7 +1165,7 @@ MOS_STATUS CodechalDecodeVp9::SetFrameStates ()
         m_resCoefProbBuffer = *(m_decodeParams.m_coefProbBuffer);
     }
 
-    if (m_firstExecuteCall)
+    if (IsFirstExecuteCall())
     {
         CODECHAL_DECODE_CHK_STATUS_RETURN(InitializeBeginFrame());
     }
@@ -1494,7 +1496,9 @@ MOS_STATUS CodechalDecodeVp9 :: InitPicStateMhwParams()
         }
     }
 
+#ifdef _MMC_SUPPORTED
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_mmc->SetPipeBufAddr(m_picMhwParams.PipeBufAddrParams));
+#endif
 
     if (m_streamOutEnabled)
     {
@@ -1502,9 +1506,11 @@ MOS_STATUS CodechalDecodeVp9 :: InitPicStateMhwParams()
             &(m_streamOutBuffer[m_streamOutCurrBufIdx]);
     }
 
+#ifdef _MMC_SUPPORTED
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_mmc->CheckReferenceList(m_picMhwParams.PipeBufAddrParams));
 
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_mmc->SetRefrenceSync(m_disableDecodeSyncLock, m_disableLockForTranscode));
+#endif
 
     m_picMhwParams.PipeBufAddrParams->presMfdDeblockingFilterRowStoreScratchBuffer =
         &m_resDeblockingFilterLineRowStoreScratchBuffer;
@@ -1682,6 +1688,14 @@ MOS_STATUS CodechalDecodeVp9 :: UpdatePicStateBuffers(
         }
     }
 
+    if (m_osInterface->osCpInterface->IsHMEnabled())
+    {
+        if (m_secureDecoder && MEDIA_IS_WA(m_hwInterface->GetWaTable(), WaSecureDecodeTDR))
+        {
+            CODECHAL_DECODE_CHK_STATUS_RETURN(m_secureDecoder->InitAuxSurface(&m_destSurface.OsResource, cmdBuffe));
+        }
+    }
+
     CODECHAL_DEBUG_TOOL(
         CODECHAL_DECODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
             &m_resVp9SegmentIdBuffer,
@@ -1701,6 +1715,7 @@ MOS_STATUS CodechalDecodeVp9 :: DecodeStateLevel()
 {
     MOS_STATUS eStatus = MOS_STATUS_SUCCESS;
 
+    PERF_UTILITY_AUTO(__FUNCTION__, PERF_DECODE, PERF_LEVEL_HAL);
     CODECHAL_DECODE_FUNCTION_ENTER;
 
     if (m_secureDecoder && m_hcpDecPhase == CodechalHcpDecodePhaseInitialized)
@@ -1716,6 +1731,9 @@ MOS_STATUS CodechalDecodeVp9 :: DecodeStateLevel()
         m_osInterface,
         &cmdBuffer,
         0));
+
+    auto mmioRegisters = m_hwInterface->GetMfxInterface()->GetMmioRegisters(m_vdboxIndex);
+    HalOcaInterface::On1stLevelBBStart(cmdBuffer, *m_osInterface->pOsContext, m_osInterface->CurrentGpuContextHandle, *m_miInterface, *mmioRegisters);
 
     //Frame tracking functionality is called at the start of a command buffer.
     //Called at FE decode phase, since BE decode phase will only construct BE batch buffers.
@@ -1883,6 +1901,8 @@ MOS_STATUS CodechalDecodeVp9 :: DecodePrimitiveLevel()
     }
 
     uint32_t renderingFlags = m_videoContextUsesNullHw;
+
+    HalOcaInterface::On1stLevelBBEnd(cmdBuffer, *m_osInterface->pOsContext);
 
     //submit command buffer
     CODECHAL_DECODE_CHK_STATUS_RETURN(m_osInterface->pfnSubmitCommandBuffer(
