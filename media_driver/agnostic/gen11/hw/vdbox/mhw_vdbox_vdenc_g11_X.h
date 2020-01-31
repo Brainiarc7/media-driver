@@ -529,7 +529,7 @@ public:
             cmd.RowStoreScratchBuffer.BufferPictureFields.DW0.CacheSelect = TVdencCmds::VDENC_Surface_Control_Bits_CMD::CACHE_SELECT_UNNAMED1;
             cmd.RowStoreScratchBuffer.LowerAddress.DW0.Value              = this->m_vdencRowStoreCache.dwAddress << 6;
         }
-        else if (params->presVdencIntraRowStoreScratchBuffer != nullptr)
+        else if (!Mos_ResourceIsNull(params->presVdencIntraRowStoreScratchBuffer))
         {
             cmd.RowStoreScratchBuffer.BufferPictureFields.DW0.MemoryObjectControlState =
                 this->m_cacheabilitySettings[MOS_CODEC_RESOURCE_USAGE_VDENC_ROW_STORE_BUFFER_CODEC].Value;
@@ -1690,6 +1690,18 @@ public:
         PMHW_VDBOX_VDENC_CMD2_STATE         params)
     {
         return MOS_STATUS_SUCCESS;
+    }
+
+    PMHW_VDBOX_PIPE_MODE_SELECT_PARAMS CreateMhwVdboxPipeModeSelectParams()
+    {
+        PMHW_VDBOX_PIPE_MODE_SELECT_PARAMS pipeModeSelectParams = MOS_New(MHW_VDBOX_PIPE_MODE_SELECT_PARAMS_G11);
+
+        return pipeModeSelectParams;
+    }
+
+    void ReleaseMhwVdboxPipeModeSelectParams(PMHW_VDBOX_PIPE_MODE_SELECT_PARAMS pipeModeSelectParams) 
+    {
+        MOS_Delete(pipeModeSelectParams);
     }
 };
 

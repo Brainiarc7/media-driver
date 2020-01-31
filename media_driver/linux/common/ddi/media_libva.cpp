@@ -54,7 +54,7 @@
 #include "mos_solo_generic.h"
 #include "media_libva_caps.h"
 #include "media_interfaces_mmd.h"
-#include "mos_util_user_interface.h"
+#include "media_user_settings_mgr.h"
 #include "cplib_utils.h"
 #include "media_interfaces.h"
 #include "mos_interface.h"
@@ -85,7 +85,8 @@ VAProcColorStandardType vp_input_color_std[DDI_VP_NUM_INPUT_COLOR_STD] = {
     VAProcColorStandardBT709,
     VAProcColorStandardSRGB,
     VAProcColorStandardSTRGB,
-    VAProcColorStandardBT2020
+    VAProcColorStandardBT2020,
+    VAProcColorStandardExplicit
 };
 
 VAProcColorStandardType vp_output_color_std[DDI_VP_NUM_OUT_COLOR_STD] = {
@@ -93,7 +94,8 @@ VAProcColorStandardType vp_output_color_std[DDI_VP_NUM_OUT_COLOR_STD] = {
     VAProcColorStandardBT709,
     VAProcColorStandardSRGB,
     VAProcColorStandardSTRGB,
-    VAProcColorStandardBT2020
+    VAProcColorStandardBT2020,
+    VAProcColorStandardExplicit
 };
 
 static VAStatus DdiMedia_DestroyContext (
@@ -993,6 +995,98 @@ void DdiMedia_MediaMemoryDecompressInternal(PMOS_CONTEXT mosCtx, PMOS_RESOURCE o
         DDI_ASSERTMESSAGE("Invalid memory decompression state.");
     }
 }
+
+//!
+//! \brief  copy internal media surface to another surface 
+//! 
+//! \param  [in] mosCtx
+//!         Pointer to mos context
+//! \param  [in] inputOsResource
+//!         Pointer input mos resource
+//! \param  [in] outputOsResource
+//!         Pointer output mos resource
+//! \param  [in] boutputcompressed
+//!         output can be compressed or not
+//!
+void DdiMedia_MediaMemoryCopyInternal(PMOS_CONTEXT mosCtx, PMOS_RESOURCE inputOsResource, PMOS_RESOURCE outputOsResource, bool boutputcompressed)
+{
+    DDI_CHK_NULL(mosCtx, "nullptr mosCtx",);
+    DDI_CHK_NULL(inputOsResource, "nullptr input osResource",);
+    DDI_CHK_NULL(outputOsResource, "nullptr output osResource",);
+    DDI_ASSERT(inputOsResource);
+    DDI_ASSERT(outputOsResource);
+
+    MediaMemDecompBaseState *mediaMemDecompState = static_cast<MediaMemDecompBaseState*>(*mosCtx->ppMediaMemDecompState);
+
+    if (!mediaMemDecompState)
+    {
+        mediaMemDecompState = static_cast<MediaMemDecompBaseState*>(MmdDevice::CreateFactory(mosCtx));
+        *mosCtx->ppMediaMemDecompState = mediaMemDecompState;
+    }
+
+    if (mediaMemDecompState)
+    {
+        mediaMemDecompState->MediaMemoryCopy(inputOsResource, outputOsResource, boutputcompressed);
+    }
+    else
+    {
+        DDI_ASSERTMESSAGE("Invalid memory decompression state.");
+    }
+}
+
+//!
+//! \brief  copy internal media surface/buffer to another surface/buffer 
+//! 
+//! \param  [in] mosCtx
+//!         Pointer to mos context
+//! \param  [in] inputOsResource
+//!         Pointer input mos resource
+//! \param  [in] outputOsResource
+//!         Pointer output mos resource
+//! \param  [in] boutputcompressed
+//!         output can be compressed or not
+//! \param  [in] copyWidth
+//!         The 2D surface Width
+//! \param  [in] copyHeight
+//!         The 2D surface height
+//! \param  [in] copyInputOffset
+//!         The offset of copied surface from
+//! \param  [in] copyOutputOffset
+//!         The offset of copied to
+//!
+void DdiMedia_MediaMemoryCopy2DInternal(PMOS_CONTEXT mosCtx, PMOS_RESOURCE inputOsResource, PMOS_RESOURCE outputOsResource, uint32_t copyWidth, uint32_t copyHeight, uint32_t copyInputOffset, uint32_t copyOutputOffset, bool boutputcompressed)
+{
+    DDI_CHK_NULL(mosCtx, "nullptr mosCtx",);
+    DDI_CHK_NULL(inputOsResource, "nullptr input osResource",);
+    DDI_CHK_NULL(outputOsResource, "nullptr output osResource",);
+    DDI_ASSERT(inputOsResource);
+    DDI_ASSERT(outputOsResource);
+
+    MediaMemDecompBaseState *mediaMemDecompState = static_cast<MediaMemDecompBaseState*>(*mosCtx->ppMediaMemDecompState);
+
+    if (!mediaMemDecompState)
+    {
+        mediaMemDecompState = static_cast<MediaMemDecompBaseState*>(MmdDevice::CreateFactory(mosCtx));
+        *mosCtx->ppMediaMemDecompState = mediaMemDecompState;
+    }
+
+    if (mediaMemDecompState)
+    {
+        mediaMemDecompState->MediaMemoryCopy2D(
+            inputOsResource,
+            outputOsResource,
+            copyWidth,
+            copyHeight,
+            copyInputOffset,
+            copyOutputOffset,
+            boutputcompressed);
+    }
+    else
+    {
+        DDI_ASSERTMESSAGE("Invalid memory decompression state.");
+    }
+}
+
 #endif
 
 //!
@@ -1044,6 +1138,8 @@ VAStatus DdiMedia_MediaMemoryDecompress(PDDI_MEDIA_CONTEXT mediaCtx, DDI_MEDIA_S
 
         mosCtx.ppMediaMemDecompState = &mediaCtx->pMediaMemDecompState;
         mosCtx.pfnMemoryDecompress   = mediaCtx->pfnMemoryDecompress;
+        mosCtx.pfnMediaMemoryCopy    = mediaCtx->pfnMediaMemoryCopy;
+        mosCtx.pfnMediaMemoryCopy2D  = mediaCtx->pfnMediaMemoryCopy2D;
         mosCtx.gtSystemInfo          = *mediaCtx->pGtSystemInfo;
         mosCtx.m_auxTableMgr         = mediaCtx->m_auxTableMgr;
         mosCtx.pGmmClientContext     = mediaCtx->pGmmClientContext;
@@ -1143,11 +1239,6 @@ VAStatus DdiMedia__Initialize (
     struct drm_state *pDRMState = (struct drm_state *)ctx->drm_state;
     DDI_CHK_NULL(pDRMState,    "nullptr pDRMState", VA_STATUS_ERROR_INVALID_CONTEXT);
 
-    if(CPLibUtils::LoadCPLib(ctx))
-    {
-        DDI_NORMALMESSAGE("CPLIB is not loaded.");
-    }
-
     // If libva failes to open the graphics card, try to open it again within Media Driver
     if(pDRMState->fd < 0 || pDRMState->fd == 0 )
     {
@@ -1178,6 +1269,24 @@ VAStatus DdiMedia__Initialize (
         mediaCtx->uiRef++;
         FreeForMediaContext(mediaCtx);
         return VA_STATUS_SUCCESS;
+    }
+
+    mediaCtx = DdiMedia_CreateMediaDriverContext();
+    if (nullptr == mediaCtx)
+    {
+        FreeForMediaContext(mediaCtx);
+        return VA_STATUS_ERROR_ALLOCATION_FAILED;
+    }
+    mediaCtx->uiRef++;
+    ctx->pDriverData = (void *)mediaCtx;
+
+    SetupApoMosSwitch(devicefd);
+    mediaCtx->apoMosEnabled = g_apoMosEnabled;
+
+    // LoadCPLib after mediaCtx->apoMosEnabled is set correctly. cp lib init would use it.
+    if (!CPLibUtils::LoadCPLib(ctx))
+    {
+        DDI_NORMALMESSAGE("CPLIB is not loaded.");
     }
 
     MOS_utilities_init();
@@ -1217,14 +1326,7 @@ VAStatus DdiMedia__Initialize (
     }
 #endif
 
-    mediaCtx = DdiMedia_CreateMediaDriverContext();
-    if (nullptr == mediaCtx)
-    {
-        FreeForMediaContext(mediaCtx);
-        return VA_STATUS_ERROR_ALLOCATION_FAILED;
-    }
 
-    mediaCtx->uiRef++;
 
     // Heap initialization here
     mediaCtx->pSurfaceHeap                         = (DDI_MEDIA_HEAP *)MOS_AllocAndZeroMemory(sizeof(DDI_MEDIA_HEAP));
@@ -1360,7 +1462,13 @@ VAStatus DdiMedia__Initialize (
         return VA_STATUS_ERROR_OPERATION_FAILED;
     }
 
-    MosUtilUserInterfaceInit(platform.eProductFamily);
+    MOS_TraceSetupInfo(
+        (VA_MAJOR_VERSION << 16) | VA_MINOR_VERSION,
+        platform.eProductFamily,
+        platform.eRenderCoreFamily,
+        (platform.usRevId << 16) | platform.usDeviceID);
+
+    MediaUserSettingsMgr::MediaUserSettingsInit(platform.eProductFamily);
 
     mediaCtx->platform = platform;
 
@@ -1387,7 +1495,9 @@ VAStatus DdiMedia__Initialize (
     }
     ctx->max_image_formats = mediaCtx->m_caps->GetImageFormatsMaxNum();
 #ifdef _MMC_SUPPORTED
-    mediaCtx->pfnMemoryDecompress = DdiMedia_MediaMemoryDecompressInternal;
+    mediaCtx->pfnMemoryDecompress  = DdiMedia_MediaMemoryDecompressInternal;
+    mediaCtx->pfnMediaMemoryCopy   = DdiMedia_MediaMemoryCopyInternal;
+    mediaCtx->pfnMediaMemoryCopy2D = DdiMedia_MediaMemoryCopy2DInternal;
 #endif
     // init the mutexs
     DdiMediaUtil_InitMutex(&mediaCtx->SurfaceMutex);
@@ -1413,7 +1523,6 @@ VAStatus DdiMedia__Initialize (
     }
 #endif
 
-    ctx->pDriverData  = (void*)mediaCtx;
     mediaCtx->bIsAtomSOC = IS_ATOMSOC(mediaCtx->iDeviceId);
 
 #if !defined(ANDROID) && defined(X11_FOUND)
@@ -1451,10 +1560,6 @@ VAStatus DdiMedia__Initialize (
     mediaCtx->m_tileYFlag      = MEDIA_IS_SKU(&mediaCtx->SkuTable, FtrTileY);
     mediaCtx->modularizedGpuCtxEnabled = true;
 
-    SetupApoMosSwitch(&mediaCtx->platform);
-    using FuncType = bool (*)(uint32_t);
-    CPLibUtils::InvokeCpFunc<FuncType>(CPLibUtils::FUNC_SETUP_MOS_APO_SWITCH, g_apoMosEnabled);
-
     if (g_apoMosEnabled)
     {
         MOS_CONTEXT mosCtx           = {};
@@ -1467,6 +1572,8 @@ VAStatus DdiMedia__Initialize (
         mosCtx.platform              = mediaCtx->platform;
         mosCtx.ppMediaMemDecompState = &mediaCtx->pMediaMemDecompState;
         mosCtx.pfnMemoryDecompress   = mediaCtx->pfnMemoryDecompress;
+        mosCtx.pfnMediaMemoryCopy    = mediaCtx->pfnMediaMemoryCopy;
+        mosCtx.pfnMediaMemoryCopy2D  = mediaCtx->pfnMediaMemoryCopy2D;
         mosCtx.m_auxTableMgr         = mediaCtx->m_auxTableMgr;
         mosCtx.pGmmClientContext     = mediaCtx->pGmmClientContext;
 
@@ -1497,6 +1604,8 @@ VAStatus DdiMedia__Initialize (
         mosCtx.platform              = mediaCtx->platform;
         mosCtx.ppMediaMemDecompState = &mediaCtx->pMediaMemDecompState;
         mosCtx.pfnMemoryDecompress   = mediaCtx->pfnMemoryDecompress;
+        mosCtx.pfnMediaMemoryCopy    = mediaCtx->pfnMediaMemoryCopy;
+        mosCtx.pfnMediaMemoryCopy2D  = mediaCtx->pfnMediaMemoryCopy2D;
         mosCtx.m_auxTableMgr         = mediaCtx->m_auxTableMgr;
         mosCtx.pGmmClientContext     = mediaCtx->pGmmClientContext;
 
@@ -1697,13 +1806,14 @@ static VAStatus DdiMedia_Terminate (
     mediaCtx->GmmFuncs.pfnDeleteClientContext(mediaCtx->pGmmClientContext);
     mediaCtx->GmmFuncs.pfnDestroySingletonContext();
 
-    // release media driver context
+    MOS_utilities_close();
+
+    // release media driver context, ctx creation is behind the mos_utilities_init
+    // If free earilier than MOS_utilities_close, memnja count error.
     MOS_FreeMemory(mediaCtx);
 
     ctx->pDriverData = nullptr;
     CPLibUtils::UnloadCPLib(ctx);
-
-    MOS_utilities_close();
 
     DdiMediaUtil_UnLockMutex(&GlobalMutex);
 
@@ -3937,6 +4047,20 @@ VAStatus DdiMedia_CreateImage(
     gmmParams.Type            = RESOURCE_2D;
     gmmParams.Flags.Gpu.Video = true;
     gmmParams.Format          = mediaCtx->m_caps->ConvertFourccToGmmFmt(format->fourcc);
+    gmmParams.Flags.Gpu.MMC   = false;
+    if (MEDIA_IS_SKU(&mediaCtx->SkuTable, FtrE2ECompression))
+    {
+        gmmParams.Flags.Gpu.MMC = true;
+        gmmParams.Flags.Info.MediaCompressed = 1;
+        gmmParams.Flags.Gpu.CCS = 1;
+        gmmParams.Flags.Gpu.RenderTarget = 1;
+        gmmParams.Flags.Gpu.UnifiedAuxSurface = 1;
+
+        if(MEDIA_IS_SKU(&mediaCtx->SkuTable, FtrFlatPhysCCS))
+        {
+            gmmParams.Flags.Gpu.UnifiedAuxSurface = 0;
+        }
+    }
 
     if (gmmParams.Format == GMM_FORMAT_INVALID)
     {

@@ -32,7 +32,7 @@
 #include "mhw_vdbox_vdenc_g12_X.h"
 #include "mhw_vdbox_g12_X.h"
 #include "mhw_render_g12_X.h"
-#include "mos_util_user_interface_g12.h"
+#include "media_user_settings_mgr_g12.h"
 #include "codeckrnheader.h"
 #if defined(ENABLE_KERNELS) && !defined(_FULL_OPEN_SOURCE)
 #include "igcodeckrn_g12.h"
@@ -700,6 +700,11 @@ MOS_STATUS CodechalVdencAvcStateG12::SetGpuCtxCreatOption()
         CODECHAL_ENCODE_CHK_STATUS_RETURN(CodecHalEncodeSinglePipeVE_ConstructParmsForGpuCtxCreation(
             m_sinlgePipeVeState,
             (PMOS_GPUCTX_CREATOPTIONS_ENHANCED)m_gpuCtxCreatOpt));
+
+        PMOS_GPUCTX_CREATOPTIONS_ENHANCED gpuCtxCreatOpts =
+            dynamic_cast<PMOS_GPUCTX_CREATOPTIONS_ENHANCED>(m_gpuCtxCreatOpt);
+
+        gpuCtxCreatOpts->Flags |=  (1 << 2);
     }
 
     return eStatus;
@@ -747,9 +752,6 @@ MOS_STATUS CodechalVdencAvcStateG12::InitKernelStateSFD()
     auto renderEngineInterface = m_hwInterface->GetRenderInterface();
     auto stateHeapInterface    = m_renderEngineInterface->m_stateHeapInterface;
     CODECHAL_ENCODE_CHK_NULL_RETURN(stateHeapInterface);
-
-    m_sfdKernelState = MOS_New(MHW_KERNEL_STATE);
-    CODECHAL_ENCODE_CHK_NULL_RETURN(m_sfdKernelState);
 
     uint8_t* kernelBinary;
     uint32_t kernelSize;
@@ -1150,6 +1152,7 @@ void CodechalVdencAvcStateG12::SetMfxAvcImgStateParams(MHW_VDBOX_AVC_IMG_PARAMS&
     param.bVDEncPerfModeEnabled =
         m_vdencInterface->IsPerfModeSupported() && m_perfModeEnabled[m_avcSeqParam->TargetUsage];
     paramsG12->bVDEncUltraModeEnabled = m_vdencUltraModeEnable;
+    param.bPerMBStreamOut = m_perMBStreamOutEnable;
     if (((m_avcSeqParam->TargetUsage & 0x07) == TARGETUSAGE_BEST_SPEED) &&
         (m_avcSeqParam->FrameWidth >= m_singlePassMinFrameWidth) &&
         (m_avcSeqParam->FrameHeight >= m_singlePassMinFrameHeight) &&
@@ -1165,13 +1168,6 @@ PMHW_VDBOX_STATE_CMDSIZE_PARAMS CodechalVdencAvcStateG12::CreateMhwVdboxStateCmd
     PMHW_VDBOX_STATE_CMDSIZE_PARAMS cmdSizeParams = MOS_New(MHW_VDBOX_STATE_CMDSIZE_PARAMS_G12);
 
     return cmdSizeParams;
-}
-
-PMHW_VDBOX_PIPE_MODE_SELECT_PARAMS CodechalVdencAvcStateG12::CreateMhwVdboxPipeModeSelectParams()
-{
-    PMHW_VDBOX_PIPE_MODE_SELECT_PARAMS pipeModeSelectParams = MOS_New(MHW_VDBOX_PIPE_MODE_SELECT_PARAMS_G12);
-
-    return pipeModeSelectParams;
 }
 
 PMHW_VDBOX_AVC_IMG_PARAMS CodechalVdencAvcStateG12::CreateMhwVdboxAvcImgParams()
@@ -1190,17 +1186,20 @@ PMHW_VDBOX_VDENC_WALKER_STATE_PARAMS CodechalVdencAvcStateG12::CreateMhwVdboxVde
 
 MOS_STATUS CodechalVdencAvcStateG12::InitKernelStateMe()
 {
+#if defined(ENABLE_KERNELS) && !defined(_FULL_OPEN_SOURCE)
     m_hmeKernel = MOS_New(CodechalKernelHmeG12, this);
     CODECHAL_ENCODE_CHK_NULL_RETURN(m_hmeKernel);
     CODECHAL_ENCODE_CHK_STATUS_RETURN(m_hmeKernel->Initialize(
         GetCommonKernelHeaderAndSizeG12,
         m_kernelBase,
         m_kuidCommon));
+#endif
     return MOS_STATUS_SUCCESS;
 }
 
 MOS_STATUS CodechalVdencAvcStateG12::ExecuteMeKernel()
 {
+    #if defined(ENABLE_KERNELS) && !defined(_FULL_OPEN_SOURCE)
     if (m_hmeKernel && m_hmeKernel->Is4xMeEnabled())
     {
         CodechalKernelHme::CurbeParam curbeParam = {};
@@ -1272,6 +1271,7 @@ MOS_STATUS CodechalVdencAvcStateG12::ExecuteMeKernel()
         CODECHAL_ENCODE_CHK_STATUS_RETURN(m_hmeKernel->Execute(curbeParam, surfaceParam, CodechalKernelHme::HmeLevel::hmeLevel4x));
         m_vdencStreamInEnabled = true;
     }
+    #endif
     return MOS_STATUS_SUCCESS;
 }
 

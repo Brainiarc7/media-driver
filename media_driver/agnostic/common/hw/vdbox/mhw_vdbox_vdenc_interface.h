@@ -97,7 +97,7 @@ typedef struct _MHW_VDBOX_VDENC_CMD1_PARAMS
     uint32_t                                Mode;
     PCODEC_HEVC_ENCODE_PICTURE_PARAMS       pHevcEncPicParams;
     PCODEC_HEVC_ENCODE_SLICE_PARAMS         pHevcEncSlcParams;
-    PCODEC_VP9_ENCODE_PIC_PARAMS            pVp9EncPicParams = nullptr;;
+    PCODEC_VP9_ENCODE_PIC_PARAMS            pVp9EncPicParams = nullptr;
     uint8_t                                *pucVdencMvCosts;
     uint8_t                                *pucVdencRdMvCosts;
     uint8_t                                *pucVdencHmeMvCosts;
@@ -105,6 +105,9 @@ typedef struct _MHW_VDBOX_VDENC_CMD1_PARAMS
     void                                   *pInputParams;
     uint16_t                                usSADQPLambda = 0;
     uint16_t                                usRDQPLambda = 0;
+    uint8_t                                 frame_type;
+    uint8_t                                 qp;
+    bool                                    isLowDelay;
     bool                                    bHevcVisualQualityImprovement = false;  //!< VQI enable flag
 } MHW_VDBOX_VDENC_CMD1_PARAMS, *PMHW_VDBOX_VDENC_CMD1_PARAMS;
 
@@ -585,6 +588,8 @@ public:
         PMHW_BATCH_BUFFER                   batchBuffer,
         PMHW_VDBOX_VDENC_CMD2_STATE         params) = 0;
 
+    virtual PMHW_VDBOX_PIPE_MODE_SELECT_PARAMS CreateMhwVdboxPipeModeSelectParams() = 0;
+    virtual void ReleaseMhwVdboxPipeModeSelectParams(PMHW_VDBOX_PIPE_MODE_SELECT_PARAMS pipeModeSelectParams) = 0;
 };
 
 #endif

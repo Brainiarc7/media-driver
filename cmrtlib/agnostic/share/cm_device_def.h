@@ -30,7 +30,7 @@
 #include <cstdint>
 #include "cm_surface_properties.h"
 #include "cm_l3_cache_config.h"
-#include "cm_queue_base.h"
+#include "cm_queue_base_hw.h"
 #include "cm_def.h"
 
 typedef enum _CM_DEVICE_CAP_NAME {
@@ -285,6 +285,8 @@ enum CM_FUNCTION_ID
     CM_FN_CMQUEUE_ENQUEUEFAST              = 0x150a,
     CM_FN_CMQUEUE_DESTROYEVENTFAST         = 0x150b,
     CM_FN_CMQUEUE_ENQUEUEWITHGROUPFAST     = 0x150c,
+    CM_FN_CMQUEUE_ENQUEUECOPY_BUFFER       = 0x150d,
+
 };
 
 #endif  // #ifndef CMRTLIB_AGNOSTIC_SHARE_CM_DEVICE_DEF_H_

@@ -19,7 +19,7 @@
 //!
 #include "codechal_decoder.h"
 #include "codechal_decode_scalability_g12.h"
-#include "mos_util_user_interface_g12.h"
+#include "media_user_settings_mgr_g12.h"
 #include "mos_os_virtualengine_next.h"
 
 //==<Functions>=======================================================
@@ -878,6 +878,8 @@ MOS_STATUS CodecHalDecodeScalability_InitializeState_G12(
     pScalabilityState->VideoContextForSP = MOS_GPU_CONTEXT_VIDEO;
     pScalabilityState->VideoContextForMP = MOS_VE_MULTINODESCALING_SUPPORTED(osInterface) ? MOS_GPU_CONTEXT_VIDEO5 : MOS_GPU_CONTEXT_VDBOX2_VIDEO;
     pScalabilityState->VideoContextFor3P = MOS_VE_MULTINODESCALING_SUPPORTED(osInterface) ? MOS_GPU_CONTEXT_VIDEO7 : MOS_GPU_CONTEXT_VDBOX2_VIDEO2;
+
+    pScalabilityState->numDelay = 15;
 
 #if (_DEBUG || _RELEASE_INTERNAL)
     // Reg key of the threshold for mode switch single pipe <-> 2 pipe. Using pic width value to control mode switch for now

@@ -120,6 +120,18 @@ static bool InitTglShadowSku(struct GfxDeviceInfo *devInfo,
     skuTable->FtrEDram = devInfo->hasERAM;
 
     skuTable->FtrE2ECompression = 1;
+    // Disable MMC for all components if set reg key
+    MOS_USER_FEATURE_VALUE_DATA userFeatureData;
+    MOS_ZeroMemory(&userFeatureData, sizeof(userFeatureData));
+    MOS_UserFeature_ReadValue_ID(
+        nullptr,
+        __MEDIA_USER_FEATURE_VALUE_DISABLE_MMC_ID,
+        &userFeatureData);
+    if (userFeatureData.bData)
+    {
+        skuTable->FtrE2ECompression = 0;
+    }
+
     skuTable->FtrLinearCCS = 1;
     skuTable->FtrTileY = 1;
 
@@ -146,8 +158,8 @@ static bool InitTglShadowWa(struct GfxDeviceInfo *devInfo,
     waTable->WaDisregardPlatformChecks          = 1;
     waTable->Wa4kAlignUVOffsetNV12LinearSurface = 1;
 
-    // Set it to 1 if need to support 256B compress mode
-    waTable->WaLimit128BMediaCompr = 1;
+    // Set it to 0 if need to support 256B compress mode
+    waTable->WaLimit128BMediaCompr = 0;
 
     return true;
 }
@@ -189,6 +201,3 @@ static bool tgllpGt2Device9a68 = DeviceInfoFactory<GfxDeviceInfo>::
 
 static bool tgllpGt2Device9a70 = DeviceInfoFactory<GfxDeviceInfo>::
     RegisterDevice(0x9A70, &tgllpGt2Info);
-
-static bool tgllpGt2Device9a78 = DeviceInfoFactory<GfxDeviceInfo>::
-    RegisterDevice(0x9A78, &tgllpGt2Info);

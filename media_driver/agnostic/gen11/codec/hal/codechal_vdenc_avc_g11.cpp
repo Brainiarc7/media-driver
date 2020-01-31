@@ -141,7 +141,7 @@ struct CodechalVdencAvcStateG11::BrcInitDmem
     uint8_t     INIT_AdaptiveCostEnable_U8;           // 0: disabled, 1: enabled
     uint8_t     INIT_AdaptiveHMEExtensionEnable_U8;   // 0: disabled, 1: enabled
     uint8_t     INIT_ICQReEncode_U8;                  // 0: disabled, 1: enabled
-    uint8_t     Reserved_u8;                          // must be zero
+    uint8_t     INIT_LookaheadDepth_U8;               // Lookahead depth in unit of frames [0, 127]
     uint8_t     INIT_SinglePassOnly;                  // 0: disabled, 1: enabled
     uint8_t     INIT_New_DeltaQP_Adaptation_U8;       // = 1 to enable new delta QP adaption
     uint8_t     RSVD2[55];                            // must be zero
@@ -218,7 +218,10 @@ struct CodechalVdencAvcStateG11::BrcUpdateDmem
     int8_t       HME1XOffset_I8;    // default = -32, Frame level X offset from the co-located (0, 0) location for HME1.
     int8_t       HME1YOffset_I8;    // default = -24, Frame level Y offset from the co-located (0, 0) location for HME1.
     uint8_t      MOTION_ADAPTIVE_G4;
-    uint8_t     RSVD2[27];
+    uint8_t      EnableLookAhead;
+    uint8_t      UPD_LA_Data_Offset_U8;
+    uint8_t      UPD_CQMEnabled_U8;  // 0 indicates CQM is disabled for current frame; otherwise CQM is enabled.
+    uint8_t      RSVD2[24];
 };
 
 // CURBE for Static Frame Detection kernel
@@ -1226,9 +1229,6 @@ MOS_STATUS CodechalVdencAvcStateG11::InitKernelStateSFD()
     auto stateHeapInterface = m_renderEngineInterface->m_stateHeapInterface;
     CODECHAL_ENCODE_CHK_NULL_RETURN(stateHeapInterface);
 
-    m_sfdKernelState = MOS_New(MHW_KERNEL_STATE);
-    CODECHAL_ENCODE_CHK_NULL_RETURN(m_sfdKernelState);
-
     uint8_t* kernelBinary;
     uint32_t kernelSize;
 
@@ -1344,7 +1344,7 @@ MOS_STATUS CodechalVdencAvcStateG11::SetDmemHuCBrcInitReset()
     SetDmemHuCBrcInitResetImpl<BrcInitDmem>(dmem);
 
     // fractional QP enable for extended rho domain
-    dmem->INIT_FracQPEnable_U8 = (uint8_t)m_vdencInterface->IsRhoDomainStatsEnabled();
+    dmem->INIT_FracQPEnable_U8 = m_lookaheadDepth > 0 ? 0 : (uint8_t)m_vdencInterface->IsRhoDomainStatsEnabled();
 
     dmem->INIT_SinglePassOnly = m_vdencSinglePassEnable;
 
@@ -1373,6 +1373,8 @@ MOS_STATUS CodechalVdencAvcStateG11::SetDmemHuCBrcInitReset()
     {
         dmem->INIT_SinglePassOnly = true;
     }
+
+    dmem->INIT_LookaheadDepth_U8 = m_lookaheadDepth;
 
     //Override the DistQPDelta.
     if (m_mbBrcEnabled)
@@ -1436,6 +1438,13 @@ MOS_STATUS CodechalVdencAvcStateG11::SetDmemHuCBrcUpdate()
     dmem->UPD_HeightInMB_U16 = m_picHeightInMb;
 
     dmem->MOTION_ADAPTIVE_G4 = (m_avcSeqParam->ScenarioInfo == ESCENARIO_GAMESTREAMING);
+    dmem->UPD_CQMEnabled_U8  = m_avcSeqParam->seq_scaling_matrix_present_flag || m_avcPicParam->pic_scaling_matrix_present_flag;
+
+    if (m_lookaheadDepth > 0)
+    {
+        dmem->EnableLookAhead = 1;
+        dmem->UPD_LA_Data_Offset_U8 = m_currLaDataIdx;
+    }
 
     CODECHAL_DEBUG_TOOL(
         CODECHAL_ENCODE_CHK_STATUS_RETURN(PopulateBrcUpdateParam(
@@ -1594,13 +1603,6 @@ PMHW_VDBOX_STATE_CMDSIZE_PARAMS CodechalVdencAvcStateG11::CreateMhwVdboxStateCmd
     PMHW_VDBOX_STATE_CMDSIZE_PARAMS cmdSizeParams = MOS_New(MHW_VDBOX_STATE_CMDSIZE_PARAMS_G11);
 
     return cmdSizeParams;
-}
-
-PMHW_VDBOX_PIPE_MODE_SELECT_PARAMS CodechalVdencAvcStateG11::CreateMhwVdboxPipeModeSelectParams()
-{
-    PMHW_VDBOX_PIPE_MODE_SELECT_PARAMS pipeModeSelectParams = MOS_New(MHW_VDBOX_PIPE_MODE_SELECT_PARAMS_G11);
-
-    return pipeModeSelectParams;
 }
 
 PMHW_VDBOX_VDENC_WALKER_STATE_PARAMS CodechalVdencAvcStateG11::CreateMhwVdboxVdencWalkerStateParams()

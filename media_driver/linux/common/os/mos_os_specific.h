@@ -290,6 +290,9 @@ struct _MOS_SPECIFIC_RESOURCE
     GraphicsResourceNext*   pGfxResourceNext;
     bool                    bConvertedFromDDIResource;
 
+    // Tile switch
+    MOS_TILE_MODE_GMM   TileModeGMM;
+    bool                bGMMTileEnabled;
 };
 
 //!
@@ -356,6 +359,9 @@ struct MOS_SURFACE
     uint32_t                CompressionFormat;                                   //!< [out] Memory compression format
     // deprecated: not to use MmcState
     MOS_MEMCOMP_STATE       MmcState;                                            // Memory compression state
+    // Tile Switch
+    MOS_TILE_MODE_GMM   TileModeGMM;                                            //!< [out] Transparent GMM Tiletype specifying in hwcmd finally
+    bool                bGMMTileEnabled;                                        //!< [out] GMM defined tile mode flag
 };
 typedef MOS_SURFACE *PMOS_SURFACE;
 
@@ -388,7 +394,7 @@ typedef struct _PATCHLOCATIONLIST
 } PATCHLOCATIONLIST, *PPATCHLOCATIONLIST;
 
 //#define PATCHLOCATIONLIST_SIZE 25
-#define CODECHAL_MAX_REGS  128
+#define CODECHAL_MAX_REGS  256
 #define PATCHLOCATIONLIST_SIZE CODECHAL_MAX_REGS
 
 //!
@@ -487,7 +493,7 @@ struct MOS_CONTEXT_OFFSET
 
 // APO related
 #define FUTURE_PLATFORM_MOS_APO   1234
-void SetupApoMosSwitch(PLATFORM *platform);
+void SetupApoMosSwitch(int32_t fd);
 
 enum OS_SPECIFIC_RESOURCE_TYPE
 {
@@ -579,6 +585,28 @@ struct _MOS_OS_CONTEXT
     void (* pfnMemoryDecompress)(
         PMOS_CONTEXT                pOsContext,
         PMOS_RESOURCE               pOsResource);
+
+    //!
+    //! \brief  the function ptr for surface copy function
+    //!
+    void  (* pfnMediaMemoryCopy )(
+        PMOS_CONTEXT       pOsContext,
+        PMOS_RESOURCE      pInputResource,
+        PMOS_RESOURCE      pOutputResource,
+        bool               bOutputCompressed);
+
+    //!
+    //! \brief  the function ptr for Media Memory 2D copy function
+    //!
+    void (* pfnMediaMemoryCopy2D)(
+        PMOS_CONTEXT       pOsContext,
+        PMOS_RESOURCE      pInputResource,
+        PMOS_RESOURCE      pOutputResource,
+        uint32_t           copyWidth,
+        uint32_t           copyHeight,
+        uint32_t           copyInputOffset,
+        uint32_t           copyOutputOffset,
+        bool               bOutputCompressed);
 
     // Os Context interface functions
     void (* pfnDestroy)(
@@ -874,6 +902,19 @@ PMOS_RESOURCE Mos_Specific_GetMarkerResource(
 //!
 uint32_t Mos_Specific_GetTsFrequency(
     PMOS_INTERFACE         pOsInterface);
+    
+//!
+//! \brief    Checks whether the requested resource is releasable
+//! \param    PMOS_INTERFACE pOsInterface
+//!           [in] OS Interface
+//! \param    PMOS_RESOURCE pOsResource
+//!           [in] Pointer to OS Resource
+//! \return   MOS_STATUS
+//!           MOS_STATUS_SUCCESS if requested can be released, otherwise MOS_STATUS_UNKNOWN
+//!
+MOS_STATUS Mos_Specific_IsResourceReleasable(
+    PMOS_INTERFACE         pOsInterface,
+    PMOS_RESOURCE          pOsResource);
 
 #if (_DEBUG || _RELEASE_INTERNAL)
 MOS_LINUX_BO * Mos_GetNopCommandBuffer_Linux(

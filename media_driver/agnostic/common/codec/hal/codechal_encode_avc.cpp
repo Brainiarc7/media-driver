@@ -3787,7 +3787,10 @@ MOS_STATUS CodechalEncodeAvcEnc::MbEncKernel(bool mbEncIFrameDistInUse)
 
     if (m_mbStatsSupported)
     {
-        mbEncSurfaceParams.bMBVProcStatsEnabled            = (m_flatnessCheckEnabled || m_adaptiveTransformDecisionEnabled);
+        mbEncSurfaceParams.bMBVProcStatsEnabled = m_flatnessCheckEnabled ||
+                                                  m_adaptiveTransformDecisionEnabled ||
+                                                  bMbBrcEnabled ||
+                                                  bMbQpDataEnabled;
         mbEncSurfaceParams.presMBVProcStatsBuffer = &m_resMbStatsBuffer;
         mbEncSurfaceParams.dwMBVProcStatsBottomFieldOffset = m_mbStatsBottomFieldOffset;
     }
@@ -5764,7 +5767,6 @@ MOS_STATUS CodechalEncodeAvcEnc::SendBrcInitResetSurfaces(PMOS_COMMAND_BUFFER cm
     params->psMeBrcDistortionBuffer->dwWidth = MOS_ALIGN_CEIL((params->dwDownscaledWidthInMb4x * 8), 64);
     params->psMeBrcDistortionBuffer->dwHeight =
         MOS_ALIGN_CEIL((params->dwDownscaledFrameFieldHeightInMb4x * 4), 8);
-    params->psMeBrcDistortionBuffer->dwPitch = params->psMeBrcDistortionBuffer->dwWidth;
 
     MOS_ZeroMemory(&surfaceCodecParams, sizeof(CODECHAL_SURFACE_CODEC_PARAMS));
     surfaceCodecParams.bIs2DSurface = true;
@@ -6112,7 +6114,7 @@ MOS_STATUS CodechalEncodeAvcEnc::InitializePicture(const EncoderParams& params)
                 MOS_ALIGN_CEIL((m_picWidthInMb * 8), 64) *
                 m_frameFieldHeightInMb;
             BrcBuffers.dwMeBrcDistortionBottomFieldOffset =
-                MOS_ALIGN_CEIL((m_downscaledWidthInMb4x * 8), 64) *
+                BrcBuffers.sMeBrcDistortionBuffer.dwPitch *
                 MOS_ALIGN_CEIL((m_downscaledFrameFieldHeightInMb4x * 4), 8);
             BrcBuffers.dwBrcMbQpBottomFieldOffset =
                 MOS_ALIGN_CEIL((m_downscaledWidthInMb4x * 4), 64) *
@@ -6193,8 +6195,8 @@ MOS_STATUS CodechalEncodeAvcEnc::InitializePicture(const EncoderParams& params)
 
     // Determine if Trellis Quantization should be enabled
     MOS_ZeroMemory(&m_trellisQuantParams, sizeof(m_trellisQuantParams));
-
-    if (!(dwTrellis & trellisDisabled))
+    // Trellis must remain switched off if it is explicitly disabled or picture is encoded with CAVLC
+    if (!(dwTrellis & trellisDisabled) && m_avcPicParam->entropy_coding_mode_flag)
     {
         if (dwTrellis == trellisInternal)
         {
@@ -6305,6 +6307,19 @@ MOS_STATUS CodechalEncodeAvcEnc::ExecuteKernelFunctions()
         CODECHAL_ENCODE_CHK_STATUS_RETURN(m_osInterface->pfnEngineWait(m_osInterface, &syncParams));
         m_semaphoreObjCount = 0; //reset
     }
+
+    // Dump BrcDist 4X_ME buffer here because it will be overwritten in BrcFrameUpdateKernel
+    CODECHAL_DEBUG_TOOL(
+        if (m_hmeEnabled && bBrcDistortionBufferSupported)
+        {
+            CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
+                &BrcBuffers.sMeBrcDistortionBuffer.OsResource,
+                CodechalDbgAttr::attrOutput,
+                "BrcDist",
+                BrcBuffers.sMeBrcDistortionBuffer.dwPitch * BrcBuffers.sMeBrcDistortionBuffer.dwHeight,
+                BrcBuffers.dwMeBrcDistortionBottomFieldOffset,
+                CODECHAL_MEDIA_STATE_4X_ME));
+        })
 
     // BRC and MbEnc are included in the same task phase
     m_lastEncPhase = true;
@@ -6450,8 +6465,6 @@ MOS_STATUS CodechalEncodeAvcEnc::DumpEncodeKernelOutput()
             CODECHAL_ME_OUTPUT_PARAMS meOutputParams;
             MOS_ZeroMemory(&meOutputParams, sizeof(meOutputParams));
             meOutputParams.psMeMvBuffer = m_hmeKernel ? m_hmeKernel->GetSurface(CodechalKernelHme::SurfaceId::me4xMvDataBuffer) : &m_4xMeMvDataBuffer;
-            meOutputParams.psMeBrcDistortionBuffer =
-                bBrcDistortionBufferSupported ? &BrcBuffers.sMeBrcDistortionBuffer : nullptr;
             meOutputParams.psMeDistortionBuffer =
                 m_4xMeDistortionBufferSupported ?
                 (m_hmeKernel ? m_hmeKernel->GetSurface(CodechalKernelHme::SurfaceId::me4xDistortionBuffer) : &m_4xMeDistortionBuffer) : nullptr;
@@ -6463,16 +6476,6 @@ MOS_STATUS CodechalEncodeAvcEnc::DumpEncodeKernelOutput()
                 CodecHal_PictureIsBottomField(m_currOriginalPic) ? MOS_ALIGN_CEIL((m_downscaledWidthInMb4x * 32), 64) * (m_downscaledFrameFieldHeightInMb4x * 4) : 0,
                 CODECHAL_MEDIA_STATE_4X_ME));
 
-            if (meOutputParams.psMeBrcDistortionBuffer)
-            {
-                CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
-                    &meOutputParams.psMeBrcDistortionBuffer->OsResource,
-                    CodechalDbgAttr::attrOutput,
-                    "BrcDist",
-                    meOutputParams.psMeBrcDistortionBuffer->dwHeight *meOutputParams.psMeBrcDistortionBuffer->dwPitch,
-                    CodecHal_PictureIsBottomField(m_currOriginalPic) ? MOS_ALIGN_CEIL((m_downscaledWidthInMb4x * 8), 64) * MOS_ALIGN_CEIL((m_downscaledFrameFieldHeightInMb4x * 4), 8) : 0,
-                    CODECHAL_MEDIA_STATE_4X_ME));
-            }
             if (meOutputParams.psMeDistortionBuffer)
             {
                 CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
@@ -6480,7 +6483,7 @@ MOS_STATUS CodechalEncodeAvcEnc::DumpEncodeKernelOutput()
                     CodechalDbgAttr::attrOutput,
                     "MeDist",
                     meOutputParams.psMeDistortionBuffer->dwHeight *meOutputParams.psMeDistortionBuffer->dwPitch,
-                    CodecHal_PictureIsBottomField(m_currOriginalPic) ? MOS_ALIGN_CEIL((m_downscaledWidthInMb4x * 8), 64) * MOS_ALIGN_CEIL((m_downscaledFrameFieldHeightInMb4x * 4 * 10), 8) : 0,
+                    m_hmeKernel ? m_hmeKernel->GetDistortionBottomFieldOffset() : (uint32_t)m_meDistortionBottomFieldOffset,
                     CODECHAL_MEDIA_STATE_4X_ME));
             }
 
@@ -6582,8 +6585,8 @@ MOS_STATUS CodechalEncodeAvcEnc::DumpEncodeKernelOutput()
             &m_resMbStatsBuffer,
             CodechalDbgAttr::attrOutput,
             "MBStatsSurf",
-            m_picWidthInMb * (((CodecHal_PictureIsField(m_currOriginalPic)) ? 2 : 4) * m_downscaledFrameFieldHeightInMb4x) * 16 * sizeof(uint32_t),
-            CodecHal_PictureIsBottomField(m_currOriginalPic) ? (m_picWidthInMb * 16 * sizeof(uint32_t) * (2 * m_downscaledFrameFieldHeightInMb4x)) : 0,
+            m_picWidthInMb * m_frameFieldHeightInMb * 16 * sizeof(uint32_t),
+            CodecHal_PictureIsBottomField(m_currOriginalPic) ? m_mbStatsBottomFieldOffset : 0,
             CODECHAL_MEDIA_STATE_4X_SCALING));
     }
 
@@ -7558,14 +7561,6 @@ MOS_STATUS CodechalEncodeAvcEnc::AllocateResourcesBrc()
         downscaledFieldHeightInMB4x = CODECHAL_GET_HEIGHT_IN_MACROBLOCKS((m_frameHeight + 1) >> 3);
         width = MOS_ALIGN_CEIL((m_downscaledWidthInMb4x << 3), 64);
         height = MOS_ALIGN_CEIL((downscaledFieldHeightInMB4x << 2), 8) << 1;
-        size = width * height;
-
-        BrcBuffers.sMeBrcDistortionBuffer.TileType = MOS_TILE_LINEAR;
-        BrcBuffers.sMeBrcDistortionBuffer.bArraySpacing = true;
-        BrcBuffers.sMeBrcDistortionBuffer.Format = Format_Buffer_2D;
-        BrcBuffers.sMeBrcDistortionBuffer.dwWidth = width;
-        BrcBuffers.sMeBrcDistortionBuffer.dwHeight = height;
-        BrcBuffers.sMeBrcDistortionBuffer.dwPitch = width;
 
         allocParamsForBuffer2D.dwWidth = width;
         allocParamsForBuffer2D.dwHeight = height;
@@ -7582,6 +7577,13 @@ MOS_STATUS CodechalEncodeAvcEnc::AllocateResourcesBrc()
             return eStatus;
         }
 
+        BrcBuffers.sMeBrcDistortionBuffer.TileType = MOS_TILE_LINEAR;
+        BrcBuffers.sMeBrcDistortionBuffer.bArraySpacing = true;
+        BrcBuffers.sMeBrcDistortionBuffer.Format = Format_Buffer_2D;
+        BrcBuffers.sMeBrcDistortionBuffer.dwWidth = width;
+        BrcBuffers.sMeBrcDistortionBuffer.dwHeight = height;
+        BrcBuffers.sMeBrcDistortionBuffer.dwPitch = (uint32_t)BrcBuffers.sMeBrcDistortionBuffer.OsResource.pGmmResInfo->GetRenderPitch();
+
         pData = (uint8_t*)m_osInterface->pfnLockResource(
             m_osInterface,
             &(BrcBuffers.sMeBrcDistortionBuffer.OsResource),
@@ -7594,6 +7596,7 @@ MOS_STATUS CodechalEncodeAvcEnc::AllocateResourcesBrc()
             return eStatus;
         }
 
+        size = BrcBuffers.sMeBrcDistortionBuffer.dwPitch * BrcBuffers.sMeBrcDistortionBuffer.dwHeight;
         MOS_ZeroMemory(pData, size);
         m_osInterface->pfnUnlockResource(
             m_osInterface, &BrcBuffers.sMeBrcDistortionBuffer.OsResource);
@@ -7765,21 +7768,23 @@ MOS_STATUS CodechalEncodeAvcEnc::AllocateResourcesMbBrc()
     {
         uint32_t width = MOS_ALIGN_CEIL((m_downscaledWidthInMb4x << 4), 64);
         uint32_t height = MOS_ALIGN_CEIL((downscaledFieldHeightInMB4x << 2), 8) << 1;
-        uint32_t size = width * height;
 
         MOS_ZeroMemory(&BrcBuffers.sBrcRoiSurface, sizeof(MOS_SURFACE));
-        BrcBuffers.sBrcRoiSurface.TileType = MOS_TILE_LINEAR;
-        BrcBuffers.sBrcRoiSurface.bArraySpacing = true;
-        BrcBuffers.sBrcRoiSurface.Format = Format_Buffer_2D;
-        BrcBuffers.sBrcRoiSurface.dwWidth = allocParamsForBuffer2D.dwWidth = width;
-        BrcBuffers.sBrcRoiSurface.dwHeight = allocParamsForBuffer2D.dwHeight = height;
-        BrcBuffers.sBrcRoiSurface.dwPitch = width;
+        allocParamsForBuffer2D.dwWidth = width;
+        allocParamsForBuffer2D.dwHeight = height;
         allocParamsForBuffer2D.pBufName = "BRC ROI Surface";
 
         CODECHAL_ENCODE_CHK_STATUS_MESSAGE_RETURN(m_osInterface->pfnAllocateResource(
             m_osInterface,
             &allocParamsForBuffer2D,
             &BrcBuffers.sBrcRoiSurface.OsResource), "Failed to allocate BRC ROI surface.");
+
+        BrcBuffers.sBrcRoiSurface.TileType = MOS_TILE_LINEAR;
+        BrcBuffers.sBrcRoiSurface.bArraySpacing = true;
+        BrcBuffers.sBrcRoiSurface.Format = Format_Buffer_2D;
+        BrcBuffers.sBrcRoiSurface.dwWidth = width;
+        BrcBuffers.sBrcRoiSurface.dwHeight = height;
+        BrcBuffers.sBrcRoiSurface.dwPitch = (uint32_t)BrcBuffers.sBrcRoiSurface.OsResource.pGmmResInfo->GetRenderPitch();
 
         uint8_t* pData = (uint8_t*)m_osInterface->pfnLockResource(
             m_osInterface,
@@ -7793,6 +7798,7 @@ MOS_STATUS CodechalEncodeAvcEnc::AllocateResourcesMbBrc()
             return eStatus;
         }
 
+        uint32_t size = BrcBuffers.sBrcRoiSurface.dwPitch * BrcBuffers.sBrcRoiSurface.dwHeight;
         MOS_ZeroMemory(pData, size);
         m_osInterface->pfnUnlockResource(
             m_osInterface,

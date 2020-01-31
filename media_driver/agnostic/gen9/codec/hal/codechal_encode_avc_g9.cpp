@@ -2147,7 +2147,9 @@ MOS_STATUS CodechalEncodeAvcEncG9::SendAvcMbEncSurfaces(PMOS_COMMAND_BUFFER cmdB
 
     if (params->bMBVProcStatsEnabled)
     {
-        size = (currFieldPicture ? 1 : 2) * params->dwFrameWidthInMb * params->dwFrameFieldHeightInMb * 16 * sizeof(uint32_t);
+        size = params->dwFrameWidthInMb *
+            (currFieldPicture ? params->dwFrameFieldHeightInMb : params->dwFrameHeightInMb) *
+            16 * sizeof(uint32_t);
 
         MOS_ZeroMemory(&surfaceCodecParams, sizeof(CODECHAL_SURFACE_CODEC_PARAMS));
         surfaceCodecParams.dwSize = size;
@@ -2652,8 +2654,8 @@ MOS_STATUS CodechalEncodeAvcEncG9::SetupROISurface()
         return eStatus;
     }
 
-    uint32_t bufferWidthInByte = MOS_ALIGN_CEIL((m_downscaledWidthInMb4x << 4), 64);//(m_picWidthInMb * 4 + 63) & ~63;
-    uint32_t bufferHeightInByte = MOS_ALIGN_CEIL((m_downscaledHeightInMb4x << 2), 8);//(m_picHeightInMb + 7) & ~7;
+    uint32_t bufferWidthInByte  = BrcBuffers.sBrcRoiSurface.dwPitch;
+    uint32_t bufferHeightInByte = MOS_ALIGN_CEIL((m_downscaledHeightInMb4x << 2), 8);
     uint32_t numMBs = m_picWidthInMb * m_picHeightInMb;
     for (uint32_t mb = 0; mb <= numMBs; mb++)
     {

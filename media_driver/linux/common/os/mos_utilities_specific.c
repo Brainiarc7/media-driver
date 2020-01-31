@@ -37,7 +37,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #if _MEDIA_RESERVED
-#include "codechal_util_user_interface_ext.h"
+#include "codechal_user_settings_mgr_ext.h"
+#include "vphal_user_settings_mgr_ext.h"
 #endif // _MEDIA_RESERVED
 #ifndef ANDROID
 #include <sys/ipc.h>   // System V IPC
@@ -48,8 +49,14 @@
 #else
 #include <cutils/properties.h>
 #endif // ANDROID
-
+#include "mos_utilities_specific_next.h"
 static const char* szUserFeatureFile = USER_FEATURE_FILE;
+
+#if _MEDIA_RESERVED
+static MediaUserSettingsMgr *codecUserFeatureExt = nullptr;
+static MediaUserSettingsMgr *vpUserFeatureExt    = nullptr;
+#endif
+
 
 #ifdef __cplusplus
 
@@ -2182,9 +2189,10 @@ MOS_STATUS MOS_UserFeatureSetValueEx_File(
     return eStatus;
 }
 
-MOS_STATUS MOS_OS_Utilities_Init()
+MOS_STATUS MOS_OS_Utilities_Init(PMOS_USER_FEATURE_KEY_PATH_INFO userFeatureKeyPathInfo)
 {
     MOS_STATUS     eStatus = MOS_STATUS_SUCCESS;
+    MOS_UNUSED(userFeatureKeyPathInfo);
 
     // lock mutex to avoid multi init in multi-threading env
     MOS_LockMutex(&gMosUtilMutex);
@@ -2199,6 +2207,7 @@ MOS_STATUS MOS_OS_Utilities_Init()
       if ((fp = fopen(tmpFile, "r")) != nullptr)
       {
         szUserFeatureFile = tmpFile;
+        MosUtilitiesSpecificNext::m_szUserFeatureFile = tmpFile;
         fclose(fp);
         MOS_OS_NORMALMESSAGE("using %s for USER_FEATURE_FILE", szUserFeatureFile);
       }
@@ -2231,8 +2240,10 @@ MOS_STATUS MOS_OS_Utilities_Init()
         }
         //Init MOS User Feature Key from mos desc table
         eStatus = MOS_DeclareUserFeatureKeysForAllDescFields();
+
 #if _MEDIA_RESERVED
-        utilUserInterface = new CodechalUtilUserInterface();
+        codecUserFeatureExt = new CodechalUserSettingsMgr();
+        vpUserFeatureExt    = new VphalUserSettingsMgr();
 #endif // _MEDIA_RESERVED
         eStatus = MOS_GenerateUserFeatureKeyXML();
 #if MOS_MESSAGES_ENABLED
@@ -2275,7 +2286,16 @@ MOS_STATUS MOS_OS_Utilities_Close()
 
         eStatus = MOS_DestroyUserFeatureKeysForAllDescFields();
 #if _MEDIA_RESERVED
-        if (utilUserInterface) delete utilUserInterface;
+        if (codecUserFeatureExt)
+        {
+            delete codecUserFeatureExt;
+            codecUserFeatureExt = nullptr;
+        }
+        if (vpUserFeatureExt)
+        {
+            delete vpUserFeatureExt;
+            vpUserFeatureExt = nullptr;
+        }
 #endif // _MEDIA_RESERVED
 #if (_DEBUG || _RELEASE_INTERNAL)
         // MOS maintains a reference counter,
@@ -2944,6 +2964,11 @@ void MOS_TraceEventClose()
     return;
 }
 
+void MOS_TraceSetupInfo(uint32_t DrvVer, uint32_t PlatFamily, uint32_t RenderFamily, uint32_t DeviceID)
+{
+    // not implemented
+}
+
 #define TRACE_EVENT_MAX_SIZE    4096
 void MOS_TraceEvent(
     uint16_t         usId,
@@ -2998,9 +3023,9 @@ void MOS_TraceEvent(
 }
 
 void MOS_TraceDataDump(
-    char * const pcName,
+    const char * pcName,
     uint32_t     flags,
-    void *const  pBuf,
+    const void * pBuf,
     uint32_t     dwSize)
 {
     // not implemented

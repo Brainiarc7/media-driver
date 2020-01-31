@@ -223,7 +223,19 @@ static bool InitTglMediaSku(struct GfxDeviceInfo *devInfo,
     }
 
     MEDIA_WR_SKU(skuTable, FtrTileY, 1);
+
     MEDIA_WR_SKU(skuTable, FtrE2ECompression, 1);
+    // Disable MMC for all components if set reg key
+    MOS_ZeroMemory(&userFeatureData, sizeof(userFeatureData));
+    MOS_UserFeature_ReadValue_ID(
+        nullptr,
+        __MEDIA_USER_FEATURE_VALUE_DISABLE_MMC_ID,
+        &userFeatureData);
+    if (userFeatureData.bData)
+    {
+        MEDIA_WR_SKU(skuTable, FtrE2ECompression, 0);
+    }
+
     MEDIA_WR_SKU(skuTable, FtrLinearCCS, 1);
 
     MEDIA_WR_SKU(skuTable, FtrUseSwSwizzling, 1);
@@ -259,20 +271,9 @@ static bool InitTglMediaWa(struct GfxDeviceInfo *devInfo,
         __MEDIA_USER_FEATURE_VALUE_AUX_TABLE_16K_GRANULAR_ID,
         &userFeatureData);
 
-    if (drvInfo->devId == 0x0201 || drvInfo->devId == 0x0bd0)
-    {
-        MEDIA_WR_WA(waTable, WaLimit128BMediaCompr, 1);
-    }
-    else
-    {
-        MEDIA_WR_WA(waTable, WaLimit128BMediaCompr, 1);
-    }
-
     MEDIA_WR_WA(waTable, WaDummyReference, 1);
 
     MEDIA_WR_WA(waTable, Wa16KInputHeightNV12Planar420, 1);
-
-    MEDIA_WR_WA(waTable, WaClearCcsVe, 1);
 
     return true;
 }

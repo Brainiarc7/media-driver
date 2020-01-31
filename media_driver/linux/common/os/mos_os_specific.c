@@ -60,6 +60,9 @@
 #include "mos_os_virtualengine.h"
 #include "mos_util_user_interface.h"
 
+#include "mos_os_virtualengine_singlepipe_next.h"
+#include "mos_os_virtualengine_scalability_next.h"
+
 //!
 //! \brief DRM VMAP patch
 //!
@@ -80,16 +83,27 @@ extern int32_t MosMemAllocCounterGfx;
 
 //============= PRIVATE FUNCTIONS <BEGIN>=========================================
 
-void SetupApoMosSwitch(PLATFORM *platform)
+void SetupApoMosSwitch(int32_t fd)
 {
-    if (platform == nullptr)
+    if (fd < 0)
     {
         g_apoMosEnabled = 0;
         return;
     }
 
-    // Mos APO wrapper
-    if (platform->eProductFamily >= FUTURE_PLATFORM_MOS_APO)
+    //Read user feature to determine if apg mos is enabled.
+    uint32_t    userfeatureValue = 0;
+    MOS_STATUS  estatus          = MosUtilities::MosReadApoMosEnabledUserFeature(userfeatureValue);
+
+    if(estatus == MOS_STATUS_SUCCESS)
+    {
+        g_apoMosEnabled = userfeatureValue;
+        return;
+    }
+    PRODUCT_FAMILY eProductFamily = IGFX_UNKNOWN;
+    HWInfo_GetGfxProductFamily(fd, eProductFamily);
+
+    if (eProductFamily >= FUTURE_PLATFORM_MOS_APO)
     {
         g_apoMosEnabled = 1;
     }
@@ -97,43 +111,8 @@ void SetupApoMosSwitch(PLATFORM *platform)
     {
         g_apoMosEnabled = 0;
     }
-
-    MOS_USER_FEATURE_VALUE_DATA UserFeatureData;
-    MOS_ZeroMemory(&UserFeatureData, sizeof(UserFeatureData));
-
-    UserFeatureData.i32Data     = g_apoMosEnabled;
-    UserFeatureData.i32DataFlag = MOS_USER_FEATURE_VALUE_DATA_FLAG_CUSTOM_DEFAULT_VALUE_TYPE;
-    MOS_UserFeature_ReadValue_ID(
-        nullptr,
-        __MEDIA_USER_FEATURE_VALUE_APO_MOS_PATH_ENABLE_ID,
-        &UserFeatureData);
-    g_apoMosEnabled = (UserFeatureData.i32Data) ? 1 : 0;
-
-#if MOS_MEDIASOLO_SUPPORTED
-    MOS_USER_FEATURE       UserFeature;
-    MOS_USER_FEATURE_VALUE UserFeatureValue;
-    int32_t                bSoloInUse;
-
-    // when MediaSolo is enabled, turn off APO MOS path
-    MOS_ZeroMemory(&UserFeatureValue, sizeof(UserFeatureValue));
-    UserFeature.Type        = MOS_USER_FEATURE_TYPE_USER;
-    UserFeature.pPath       = __MEDIA_USER_FEATURE_SUBKEY_INTERNAL;
-    UserFeature.pValues     = &UserFeatureValue;
-    UserFeature.uiNumValues = 1;
-    MOS_UserFeature_ReadValue(
-        nullptr,
-        &UserFeature,
-        __MEDIA_USER_FEATURE_VALUE_MEDIASOLO_ENABLE,
-        MOS_USER_FEATURE_VALUE_TYPE_INT32);
-    bSoloInUse = (UserFeatureValue.u32Data) ? true : false;
-
-    if (bSoloInUse)
-    {
-        g_apoMosEnabled = 0;
-    }
-#endif //MOS_MEDIASOLO_SUPPORTED
+    return;
 }
-
 
 
 //!
@@ -1518,6 +1497,8 @@ MOS_STATUS Linux_InitContext(
     // For Media Memory compression
     pContext->ppMediaMemDecompState     = pOsDriverContext->ppMediaMemDecompState;
     pContext->pfnMemoryDecompress       = pOsDriverContext->pfnMemoryDecompress;
+    pContext->pfnMediaMemoryCopy        = pOsDriverContext->pfnMediaMemoryCopy;
+    pContext->pfnMediaMemoryCopy2D      = pOsDriverContext->pfnMediaMemoryCopy2D;
 
     // Set interface functions
     pContext->pfnDestroy                 = Linux_Destroy;
@@ -1876,6 +1857,11 @@ void Mos_Specific_Destroy(
     }
     if (pOsInterface->pVEInterf)
     {
+        if (g_apoMosEnabled && pOsInterface->pVEInterf->veInterface)
+        {
+            pOsInterface->pVEInterf->veInterface->Destroy();
+            MOS_Delete(pOsInterface->pVEInterf->veInterface);
+        }
         MOS_FreeMemAndSetNull(pOsInterface->pVEInterf);
     }
 
@@ -2316,6 +2302,19 @@ MOS_STATUS Mos_Specific_AllocateResource(
         case MOS_TILE_Y:
             GmmParams.Flags.Gpu.MMC        = pParams->bIsCompressible;
             tileformat_linux               = I915_TILING_Y;
+            if (pParams->bIsCompressible && MEDIA_IS_SKU(&pOsInterface->pOsContext->SkuTable, FtrE2ECompression))
+            {
+                GmmParams.Flags.Gpu.MMC = true;
+                GmmParams.Flags.Info.MediaCompressed = 1;
+                GmmParams.Flags.Gpu.CCS = 1;
+                GmmParams.Flags.Gpu.RenderTarget = 1;
+                GmmParams.Flags.Gpu.UnifiedAuxSurface = 1;
+
+                if(MEDIA_IS_SKU(&pOsInterface->pOsContext->SkuTable, FtrFlatPhysCCS))
+                {
+                    GmmParams.Flags.Gpu.UnifiedAuxSurface = 0;
+                }
+            }
             break;
         case MOS_TILE_X:
             GmmParams.Flags.Info.TiledX    = true;
@@ -2382,6 +2381,8 @@ MOS_STATUS Mos_Specific_AllocateResource(
         pOsResource->bufname      = bufname;
         pOsResource->bo           = bo;
         pOsResource->TileType     = tileformat;
+        pOsResource->TileModeGMM       = (MOS_TILE_MODE_GMM)pGmmResourceInfo->GetTileModeSurfaceState();
+        pOsResource->bGMMTileEnabled   = true;
         pOsResource->pData        = (uint8_t*) bo->virt; //It is useful for batch buffer to fill commands
         MOS_OS_VERBOSEMESSAGE("Alloc %7d bytes (%d x %d resource).",iSize, pParams->dwWidth, iHeight);
     }
@@ -2477,6 +2478,8 @@ MOS_STATUS Mos_Specific_GetResourceInfo(
         return MOS_STATUS_INVALID_PARAMETER;
     }
     // check resource's tile type
+    pResDetails->TileModeGMM       = (MOS_TILE_MODE_GMM)pGmmResourceInfo->GetTileModeSurfaceState();
+    pResDetails->bGMMTileEnabled   = true;
     switch (pGmmResourceInfo->GetTileType())
     {
     case GMM_TILED_Y:
@@ -3081,6 +3084,117 @@ MOS_STATUS Mos_Specific_DecompResource(
             MOS_OS_CHK_NULL(pOsContext->pfnMemoryDecompress);
             pOsContext->pfnMemoryDecompress(pOsContext, pOsResource);
         }
+    }
+
+    eStatus = MOS_STATUS_SUCCESS;
+
+finish:
+    return eStatus;
+}
+
+//!
+//! \brief    Decompress and Copy Resource to Another Buffer
+//! \details  Decompress and Copy Resource to Another Buffer
+//! \param    PMOS_INTERFACE pOsInterface
+//!           [in] pointer to OS Interface structure
+//! \param    PMOS_RESOURCE inputOsResource
+//!           [in] Input Resource object
+//! \param    PMOS_RESOURCE outputOsResource
+//!           [out] output Resource object
+//! \param    [in] bOutputCompressed
+//!            true means apply compression on output surface, else output uncompressed surface
+//! \return   MOS_STATUS
+//!           MOS_STATUS_SUCCESS if successful
+//!
+MOS_STATUS Mos_Specific_DoubleBufferCopyResource(
+    PMOS_INTERFACE        osInterface,
+    PMOS_RESOURCE         inputOsResource,
+    PMOS_RESOURCE         outputOsResource,
+    bool                  bOutputCompressed)
+{
+    MOS_STATUS              eStatus = MOS_STATUS_UNKNOWN;
+    MOS_OS_CONTEXT          *pContext = nullptr;
+
+    //---------------------------------------
+    MOS_OS_CHK_NULL(osInterface);
+    MOS_OS_CHK_NULL(inputOsResource);
+    MOS_OS_CHK_NULL(outputOsResource);
+    //---------------------------------------
+    
+    if (g_apoMosEnabled)
+    {
+        return MosInterface::DoubleBufferCopyResource(osInterface->osStreamState, inputOsResource, outputOsResource, bOutputCompressed);
+    }
+
+    pContext = osInterface->pOsContext;
+
+    if (inputOsResource && inputOsResource->bo && inputOsResource->pGmmResInfo &&
+        outputOsResource && outputOsResource->bo && outputOsResource->pGmmResInfo)
+    {
+        // Double Buffer Copy can support any tile status surface with/without compression
+        pContext->pfnMediaMemoryCopy(pContext, inputOsResource, outputOsResource, bOutputCompressed);
+    }
+
+    eStatus = MOS_STATUS_SUCCESS;
+
+finish:
+    return eStatus;
+}
+
+//!
+//! \brief    Decompress and Copy Resource to Another Buffer
+//! \details  Decompress and Copy Resource to Another Buffer
+//! \param    PMOS_INTERFACE pOsInterface
+//!           [in] pointer to OS Interface structure
+//! \param    PMOS_RESOURCE inputOsResource
+//!           [in] Input Resource object
+//! \param    PMOS_RESOURCE outputOsResource
+//!           [out] output Resource object
+//! \param    [in] copyWidth
+//!            The 2D surface Width
+//! \param    [in] copyHeight
+//!            The 2D surface height
+//! \param    [in] copyInputOffset
+//!            The offset of copied surface from
+//! \param    [in] copyOutputOffset
+//!            The offset of copied to
+//! \param    [in] bOutputCompressed
+//!            true means apply compression on output surface, else output uncompressed surface
+//! \return   MOS_STATUS
+//!           MOS_STATUS_SUCCESS if successful
+//!
+MOS_STATUS Mos_Specific_MediaCopyResource2D(
+    PMOS_INTERFACE        osInterface,
+    PMOS_RESOURCE         inputOsResource,
+    PMOS_RESOURCE         outputOsResource,
+    uint32_t              copyWidth,
+    uint32_t              copyHeight,
+    uint32_t              copyInputOffset,
+    uint32_t              copyOutputOffset,
+    bool                  bOutputCompressed)
+{
+    MOS_STATUS              eStatus = MOS_STATUS_UNKNOWN;
+    MOS_OS_CONTEXT          *pContext = nullptr;
+
+    //---------------------------------------
+    MOS_OS_CHK_NULL(osInterface);
+    MOS_OS_CHK_NULL(inputOsResource);
+    MOS_OS_CHK_NULL(outputOsResource);
+    //---------------------------------------
+    
+    if (g_apoMosEnabled)
+    {
+        return MosInterface::MediaCopyResource2D(osInterface->osStreamState, inputOsResource, outputOsResource,
+            copyWidth, copyHeight, copyInputOffset, copyOutputOffset, bOutputCompressed);
+    }
+
+    pContext = osInterface->pOsContext;
+
+    if (inputOsResource && inputOsResource->bo && inputOsResource->pGmmResInfo &&
+        outputOsResource && outputOsResource->bo && outputOsResource->pGmmResInfo)
+    {
+        // Double Buffer Copy can support any tile status surface with/without compression
+        pContext->pfnMediaMemoryCopy2D(pContext, inputOsResource, outputOsResource, copyWidth, copyHeight, copyInputOffset, copyOutputOffset, bOutputCompressed);
     }
 
     eStatus = MOS_STATUS_SUCCESS;
@@ -6903,6 +7017,8 @@ MOS_STATUS Mos_Specific_InitInterface(
     pOsInterface->pfnLockResource                           = Mos_Specific_LockResource;
     pOsInterface->pfnUnlockResource                         = Mos_Specific_UnlockResource;
     pOsInterface->pfnDecompResource                         = Mos_Specific_DecompResource;
+    pOsInterface->pfnDoubleBufferCopyResource               = Mos_Specific_DoubleBufferCopyResource;
+    pOsInterface->pfnMediaCopyResource2D                    = Mos_Specific_MediaCopyResource2D;
     pOsInterface->pfnRegisterResource                       = Mos_Specific_RegisterResource;
     pOsInterface->pfnResetResourceAllocationIndex           = Mos_Specific_ResetResourceAllocationIndex;
     pOsInterface->pfnGetResourceAllocationIndex             = Mos_Specific_GetResourceAllocationIndex;
@@ -6997,10 +7113,16 @@ MOS_STATUS Mos_Specific_InitInterface(
 
     pOsUserFeatureInterface->bIsNotificationSupported   = false;
     pOsUserFeatureInterface->pOsInterface               = pOsInterface;
-    pOsUserFeatureInterface->pfnReadValue               = MOS_UserFeature_ReadValue;
     pOsUserFeatureInterface->pfnEnableNotification      = MOS_UserFeature_EnableNotification;
     pOsUserFeatureInterface->pfnDisableNotification     = MOS_UserFeature_DisableNotification;
     pOsUserFeatureInterface->pfnParsePath               = MOS_UserFeature_ParsePath;
+
+    if (g_apoMosEnabled)
+    {
+        pOsUserFeatureInterface->pfnEnableNotification      = MosUtilities::MosUserFeatureEnableNotification;
+        pOsUserFeatureInterface->pfnDisableNotification     = MosUtilities::MosUserFeatureDisableNotification;
+        pOsUserFeatureInterface->pfnParsePath               = MosUtilities::MosUserFeatureParsePath;
+    }
 
     // Init reset count for the context
     ret = mos_get_reset_stats(pOsInterface->pOsContext->intel_context, &dwResetCount, nullptr, nullptr);
@@ -7264,6 +7386,22 @@ uint32_t Mos_Specific_GetTsFrequency(PMOS_INTERFACE osInterface)
         // fail to query it from KMD
         return 0;
     }
+}
+
+//!
+//! \brief    Checks whether the requested resource is releasable
+//! \param    PMOS_INTERFACE pOsInterface
+//!           [in] OS Interface
+//! \param    PMOS_RESOURCE pOsResource
+//!           [in] Pointer to OS Resource
+//! \return   MOS_STATUS
+//!           MOS_STATUS_SUCCESS if requested can be released, otherwise MOS_STATUS_UNKNOWN
+//!
+MOS_STATUS Mos_Specific_IsResourceReleasable(
+    PMOS_INTERFACE         pOsInterface,
+    PMOS_RESOURCE          pOsResource)
+{
+    return MOS_STATUS_SUCCESS;
 }
 
 #if MOS_COMMAND_RESINFO_DUMP_SUPPORTED

@@ -350,6 +350,10 @@ if(GEN9_CML)
     media_include_subdirectory(gen9_cml)
 endif()
 
+if(GEN9_CMPV)
+    media_include_subdirectory(gen9_cmpv)
+endif()
+
 if(GEN9_BXT)
     media_include_subdirectory(gen9_bxt)
 endif()
@@ -388,6 +392,7 @@ endif()
 
 if(GEN12)
     media_include_subdirectory(gen12)
+    media_include_subdirectory(../media_driver_next/agnostic/gen12)
 endif()
 
 if(GEN12_TGLLP)

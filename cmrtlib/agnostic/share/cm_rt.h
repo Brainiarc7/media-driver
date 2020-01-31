@@ -309,6 +309,7 @@ typedef enum _CM_RETURN_CODE
     CM_INVALID_CREATE_OPTION_FOR_BUFFER_STATELESS = -103,
     CM_INVALID_KERNEL_ARG_POINTER                 = -104,
     CM_LOAD_LIBRARY_FAILED                        = -105,
+    CM_NO_SUPPORTED_ADAPTER                       = -106,
 
     /*
      * RANGE <=-10000 FOR INTERNAL ERROR CODE
@@ -1522,7 +1523,11 @@ public:
                                   CmEvent *&event,
                                   const CmThreadGroupSpace *threadGroupSpace = nullptr) = 0;
 
+    CM_RT_API virtual int32_t EnqueueReadBuffer(CmBuffer* buffer, size_t offset, const unsigned char* sysMem, uint64_t sysMemSize, CmEvent* wait_event, CmEvent*& event, unsigned option) = 0;
+    CM_RT_API virtual int32_t EnqueueWriteBuffer(CmBuffer* buffer, size_t offset, const unsigned char* sysMem, uint64_t sysMemSize, CmEvent* wait_event, CmEvent*& event, unsigned option) = 0;
+
     CM_RT_API virtual INT SetResidentGroupAndParallelThreadNum(uint32_t residentGroupNum, uint32_t parallelThreadNum) = 0;
+
 protected:
     ~CmQueue(){};
 };

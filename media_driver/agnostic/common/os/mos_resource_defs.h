@@ -209,6 +209,19 @@ C_ASSERT(Format_Count == 103); //!< When adding, update assert & vphal_solo_scen
             ( (format == Format_AI44) || \
               (format == Format_IA44) )
 
+#define IS_ALPHA_FORMAT(format)                   \
+            ( (format == Format_A8R8G8B8)      || \
+              (format == Format_A8B8G8R8)      || \
+              (format == Format_R10G10B10A2)   || \
+              (format == Format_B10G10R10A2)   || \
+              (format == Format_A16B16G16R16)  || \
+              (format == Format_A16R16G16B16)  || \
+              (format == Format_A16B16G16R16F) || \
+              (format == Format_A16R16G16B16F) || \
+              (format == Format_Y410)          || \
+              (format == Format_Y416)          || \
+              (format == Format_AYUV) )
+
 #define IS_PL2_FORMAT(format)            \
             ( (format == Format_PL2)  || \
               (format == Format_NV12) || \
@@ -473,6 +486,18 @@ typedef enum _MOS_TILE_TYPE
     MOS_TILE_INVALID
 } MOS_TILE_TYPE;
 C_ASSERT(MOS_TILE_LINEAR == 4); //!< When adding, update assert
+
+//!
+//! \brief Enum for tile mode from GMM
+//!
+typedef enum _MOS_TILE_MODE_GMM : uint8_t
+{
+    MOS_TILE_LINEAR_GMM = 0,
+    MOS_TILE_64_GMM,
+    MOS_TILE_X_GMM,
+    MOS_TILE_4_GMM,
+} MOS_TILE_MODE_GMM;
+C_ASSERT(MOS_TILE_4_GMM == 3);
 
 #define IS_TILE_FORMAT(TileType)              \
             ( (MOS_TILE_X  == TileType) ||    \

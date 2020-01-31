@@ -66,40 +66,31 @@
 #ifdef __MOS_USER_FEATURE_WA_
 #define __NULL_USER_FEATURE_VALUE__                                                                                                                                                                                                              \
     {                                                                                                                                                                                                                                            \
-        __MOS_USER_FEATURE_KEY_INVALID_ID, nullptr, nullptr, nullptr, nullptr, MOS_USER_FEATURE_TYPE_INVALID, MOS_USER_FEATURE_VALUE_TYPE_INVALID, nullptr, nullptr, false, 0, nullptr, nullptr, MOS_USER_FEATURE_EFFECT_ALWAYS, {0}, { {0}, 0 } \
+        __MOS_USER_FEATURE_KEY_INVALID_ID, nullptr, nullptr, nullptr, nullptr, MOS_USER_FEATURE_TYPE_INVALID, MOS_USER_FEATURE_VALUE_TYPE_INVALID, nullptr, nullptr, false, 0, nullptr, MOS_USER_FEATURE_EFFECT_ALWAYS, {0}, { {0}, 0 }          \
     }
 #define MOS_DECLARE_UF_KEY(Id, ValueName, Readpath, Writepath, Group, Type, ValueType, DefaultValue, Description)                                                          \
     {                                                                                                                                                                      \
-        Id, ValueName, Group, Readpath, Writepath, Type, ValueType, DefaultValue, Description, false, 1, nullptr, nullptr, MOS_USER_FEATURE_EFFECT_ALWAYS, {0}, { {0}, 0 } \
+        Id, ValueName, Group, Readpath, Writepath, Type, ValueType, DefaultValue, Description, false, 1, nullptr, MOS_USER_FEATURE_EFFECT_ALWAYS, {0}, { {0}, 0 }          \
     }
 // The MOS_DECLARE_UF_KEY_DBGONLY macro will make the user feature key read only return default value in release build without accessing user setting
 // it is an alternative way for removing the key defintion entirely in release driver, and still provide an unified place for default values of the
 // user feature key read request that is needed for release driver
 #define MOS_DECLARE_UF_KEY_DBGONLY(Id, ValueName, Readpath, Writepath, Group, Type, ValueType, DefaultValue, Description)                                                     \
     {                                                                                                                                                                         \
-        Id, ValueName, Group, Readpath, Writepath, Type, ValueType, DefaultValue, Description, false, 1, nullptr, nullptr, MOS_USER_FEATURE_EFFECT_DEBUGONLY, {0}, { {0}, 0 } \
-    }
-#define MOS_DECLARE_UF_KEY_SETFN(Id, ValueName, Readpath, Writepath, Group, Type, ValueType, pfn, Description)                                     \
-    {                                                                                                                                              \
-        Id, ValueName, Group, Readpath, Writepath, Type, ValueType, "0", Description, false, 1, nullptr, pfn, MOS_USER_FEATURE_EFFECT_ALWAYS, {0}, \
-        {                                                                                                                                          \
-            {                                                                                                                                      \
-                0                                                                                                                                  \
-            }                                                                                                                                      \
-        }                                                                                                                                          \
+        Id, ValueName, Group, Readpath, Writepath, Type, ValueType, DefaultValue, Description, false, 1, nullptr, MOS_USER_FEATURE_EFFECT_DEBUGONLY, {0}, { {0}, 0 }          \
     }
 #else
 #define __NULL_USER_FEATURE_VALUE__                                                                                                                                                                                                        \
     {                                                                                                                                                                                                                                      \
-        __MOS_USER_FEATURE_KEY_INVALID_ID, nullptr, nullptr, nullptr, nullptr, MOS_USER_FEATURE_TYPE_INVALID, MOS_USER_FEATURE_VALUE_TYPE_INVALID, nullptr, nullptr, false, 0, nullptr nullptr, MOS_USER_FEATURE_EFFECT_ALWAYS, { {0}, 0 } \
+        __MOS_USER_FEATURE_KEY_INVALID_ID, nullptr, nullptr, nullptr, nullptr, MOS_USER_FEATURE_TYPE_INVALID, MOS_USER_FEATURE_VALUE_TYPE_INVALID, nullptr, nullptr, false, 0, nullptr, MOS_USER_FEATURE_EFFECT_ALWAYS, { {0}, 0 }         \
     }
 #define MOS_DECLARE_UF_KEY(Id, ValueName, Readpath, Writepath, Group, Type, ValueType, DefaultValue, Description)                                                     \
     {                                                                                                                                                                 \
-        Id, ValueName, Group, Readpath, Writepath, Type, ValueType, DefaultValue, Description, false, 1, nullptr, nullptr, MOS_USER_FEATURE_EFFECT_ALWAYS, { {0}, 0 } \
+        Id, ValueName, Group, Readpath, Writepath, Type, ValueType, DefaultValue, Description, false, 1, nullptr, MOS_USER_FEATURE_EFFECT_ALWAYS, { {0}, 0 }          \
     }
 #define MOS_DECLARE_UF_KEY_DBGONLY(Id, ValueName, Readpath, Writepath, Group, Type, ValueType, DefaultValue, Description)                                                \
     {                                                                                                                                                                    \
-        Id, ValueName, Group, Readpath, Writepath, Type, ValueType, DefaultValue, Description, false, 1, nullptr, nullptr, MOS_USER_FEATURE_EFFECT_DEBUGONLY, { {0}, 0 } \
+        Id, ValueName, Group, Readpath, Writepath, Type, ValueType, DefaultValue, Description, false, 1, nullptr, MOS_USER_FEATURE_EFFECT_DEBUGONLY, { {0}, 0 }          \
     }
 #endif
 #ifndef MAX_USER_FEATURE_FIELD_LENGTH
@@ -180,6 +171,7 @@ typedef enum _MOS_USER_FEATURE_VALUE_ID
     __MEDIA_USER_FEATURE_VALUE_VDENC_CRE_PREFETCH_ENABLE_ID,
     __MEDIA_USER_FEATURE_VALUE_VDENC_TLB_PREFETCH_ENABLE_ID,
     __MEDIA_USER_FEATURE_VALUE_VDENC_TLB_ALLOCATION_WA_ENABLE_ID,
+    __MEDIA_USER_FEATURE_VALUE_VDENC_PERMB_STREAMOUT_ENABLE_ID,
     __MEDIA_USER_FEATURE_VALUE_VDENC_SINGLE_PASS_ENABLE_ID,
     __MEDIA_USER_FEATURE_VALUE_VDENC_BRC_MOTION_ADAPTIVE_ENABLE_ID,
     __MEDIA_USER_FEATURE_VALUE_MMIO_MFX_LRA_0_OVERRIDE_ID,
@@ -314,6 +306,7 @@ typedef enum _MOS_USER_FEATURE_VALUE_ID
     __MEDIA_USER_FEATURE_VALUE_ENCODE_CSC_METHOD_ID,
     __MEDIA_USER_FEATURE_VALUE_ENCODE_RAW_TILE_ID,
     __MEDIA_USER_FEATURE_VALUE_ENCODE_RAW_FORMAT_ID,
+    __MEDIA_USER_FEATURE_VALUE_ENCODE_CQM_QP_THRESHOLD_ID,
     __MEDIA_USER_FEATURE_VALUE_ISA_ASM_DEBUG_ENABLE_ID,
     __MEDIA_USER_FEATURE_VALUE_ISA_ASM_DEBUG_SURF_BTI_ID,
     __MEDIA_USER_FEATURE_VALUE_ROWSTORE_CACHE_DISABLE_ID,
@@ -413,6 +406,7 @@ typedef enum _MOS_USER_FEATURE_VALUE_ID
     __MEDIA_USER_FEATURE_VALUE_MDF_MAX_THREAD_NUM_ID,
     __MEDIA_USER_FEATURE_VALUE_MDF_FORCE_COHERENT_STATELESSBTI_ID,
     __MEDIA_USER_FEATURE_ENABLE_RENDER_ENGINE_MMC_ID,
+    __MEDIA_USER_FEATURE_VALUE_DISABLE_MMC_ID,
     __VPHAL_VEBOX_OUTPUTPIPE_MODE_ID,
     __VPHAL_VEBOX_FEATURE_INUSE_ID,
     __VPHAL_RNDR_SSD_CONTROL_ID,
@@ -449,6 +443,8 @@ typedef enum _MOS_USER_FEATURE_VALUE_ID
     __VPHAL_VEBOX_DISABLE_TEMPORAL_DENOISE_FILTER_ID,
     __VPHAL_ENABLE_SUPER_RESOLUTION_ID,
     __VPHAL_SUPER_RESOLUTION_MODE_ID,
+    __VPHAL_ENABLE_SUPER_RESOLUTION_EDSR_ID,
+    __VPHAL_SUPER_RESOLUTION_EDSR_MODE_ID,
 #if (_DEBUG || _RELEASE_INTERNAL)
     __VPHAL_COMP_8TAP_ADAPTIVE_ENABLE_ID,
     __VPHAL_RNDR_FORCE_VP_DECOMPRESSED_OUTPUT_ID,
@@ -511,7 +507,9 @@ typedef enum _MOS_USER_FEATURE_VALUE_ID
     __MEDIA_USER_FEATURE_VALUE_OCA_ERROR_HINT_ID,
     __MEDIA_USER_FEATURE_VALUE_IS_INDIRECT_STATE_HEAP_INVALID_ID,
     __MEDIA_USER_FEATURE_VALUE_ENABLE_SW_BACK_ANNOTATION_ID,
+    __MEDIA_USER_FEATURE_VALUE_ENABLE_CC_STITCHING_ID,
 #if (_DEBUG || _RELEASE_INTERNAL)
+    __MEDIA_USER_FEATURE_VALUE_ENABLE_SW_STITCHING_ID,
     __MEDIA_USER_FEATURE_VALUE_ALLOC_MEMORY_FAIL_SIMULATE_MODE_ID,
     __MEDIA_USER_FEATURE_VALUE_ALLOC_MEMORY_FAIL_SIMULATE_FREQ_ID,
     __MEDIA_USER_FEATURE_VALUE_ALLOC_MEMORY_FAIL_SIMULATE_HINT_ID,
@@ -677,8 +675,6 @@ typedef struct
     int32_t                      bExists;        //<! Set if the user feature key is defined in the user feature key manager
     uint32_t                     uiNumOfValues;  //<! Number of valid user feature key values. Useful for user feature keys of type bitmask and enum
     PMOS_USER_FEATURE_VALUE_INFO pValueInfo;     //<! Store information of all valid enum/bit mask values and names
-    MOS_STATUS (*pfnSetDefaultValueData)
-    (PMOS_USER_FEATURE_VALUE_DATA pValueData);
     MOS_USER_FEATURE_EFFECTIVE_TYPE EffctiveRange;  //<! User feature key effect range, eg: Always effective / debug driver only
     // Temp WA for old user feature read/write
 #ifdef __MOS_USER_FEATURE_WA_
@@ -737,14 +733,6 @@ typedef struct _MOS_USER_FEATURE_INTERFACE
 {
     void *                  pOsInterface;              //!< Pointer to OS Interface
     int32_t                 bIsNotificationSupported;  //!< Whether Notification feature is supported
-    const MOS_USER_FEATURE *pUserFeatureInit;          //!< Initializer for Os User Feature structure
-
-    MOS_STATUS (*pfnReadValue)
-    (
-        PMOS_USER_FEATURE_INTERFACE pOsUserFeatureInterface,
-        PMOS_USER_FEATURE           pUserFeature,
-        const char *                pValueName,
-        MOS_USER_FEATURE_VALUE_TYPE ValueType);
 
     MOS_STATUS (*pfnEnableNotification)
     (
@@ -774,6 +762,16 @@ typedef struct
     HANDLE   hEvent;      //!< Handle to User Feature Key Event
     PTP_WAIT hWaitEvent;  //!< Handle to User Feature Key Wait Event
 } MOS_USER_FEATURE_NOTIFY_DATA_COMMON, *PMOS_USER_FEATURE_NOTIFY_DATA_COMMON;
+
+//!
+//! \brief User Feature Key Path Info
+//!
+typedef struct
+{
+    char *   Path;
+    uint32_t Length;
+    uint32_t RefCnt;
+} MOS_USER_FEATURE_KEY_PATH_INFO, *PMOS_USER_FEATURE_KEY_PATH_INFO;
 
 #ifdef __cplusplus
 //Memory alloc fail simulatiion related defination

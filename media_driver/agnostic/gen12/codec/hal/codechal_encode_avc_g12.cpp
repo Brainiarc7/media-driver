@@ -31,7 +31,7 @@
 #include "mhw_render_g12_X.h"
 #include "codeckrnheader.h"
 #include "igcodeckrn_g12.h"
-#include "mos_util_user_interface_g12.h"
+#include "media_user_settings_mgr_g12.h"
 #if USE_CODECHAL_DEBUG_TOOL
 #include "codechal_debug_encode_par_g12.h"
 #include "mhw_vdbox_mfx_hwcmd_g12_X.h"
@@ -1681,7 +1681,10 @@ MOS_STATUS CodechalEncodeAvcEncG12::MbEncKernel(bool mbEncIFrameDistInUse)
 
     if (m_mbStatsSupported)
     {
-        mbEncSurfaceParams.bMBVProcStatsEnabled            = (m_flatnessCheckEnabled || m_adaptiveTransformDecisionEnabled);
+        mbEncSurfaceParams.bMBVProcStatsEnabled = m_flatnessCheckEnabled ||
+                                                  m_adaptiveTransformDecisionEnabled ||
+                                                  bMbBrcEnabled ||
+                                                  bMbQpDataEnabled;
         mbEncSurfaceParams.presMBVProcStatsBuffer          = &m_resMbStatsBuffer;
         mbEncSurfaceParams.dwMBVProcStatsBottomFieldOffset = m_mbStatsBottomFieldOffset;
     }
@@ -2042,6 +2045,19 @@ MOS_STATUS CodechalEncodeAvcEncG12::ExecuteKernelFunctions()
     swScoreboardKernelParames.swScoreboardSurfaceHeight = swScoreboardKernelParames.scoreboardHeight;
 
     CODECHAL_ENCODE_CHK_STATUS_RETURN(m_swScoreboardState->Execute(&swScoreboardKernelParames));
+
+    // Dump BrcDist 4X_ME buffer here because it will be overwritten in BrcFrameUpdateKernel
+    CODECHAL_DEBUG_TOOL(
+        if (m_hmeEnabled && bBrcDistortionBufferSupported)
+        {
+            CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
+                &BrcBuffers.sMeBrcDistortionBuffer.OsResource,
+                CodechalDbgAttr::attrOutput,
+                "BrcDist",
+                BrcBuffers.sMeBrcDistortionBuffer.dwPitch * BrcBuffers.sMeBrcDistortionBuffer.dwHeight,
+                BrcBuffers.dwMeBrcDistortionBottomFieldOffset,
+                CODECHAL_MEDIA_STATE_4X_ME));
+        })
 
     if (bBrcEnabled)
     {
@@ -4706,8 +4722,9 @@ MOS_STATUS CodechalEncodeAvcEncG12::SendAvcMbEncSurfaces(PMOS_COMMAND_BUFFER cmd
 
     if (params->bMBVProcStatsEnabled)
     {
-        //size = (currFieldPicture ? 1 : 2) * params->dwFrameWidthInMb * params->dwFrameFieldHeightInMb * 16 * sizeof(uint32_t);
-        size = (currFieldPicture ? 1 : 1) * params->dwFrameWidthInMb * params->dwFrameFieldHeightInMb * 16 * sizeof(uint32_t);
+        size = params->dwFrameWidthInMb *
+            (currFieldPicture ? params->dwFrameFieldHeightInMb : params->dwFrameHeightInMb) *
+            16 * sizeof(uint32_t);
 
         memset((void *)&surfaceCodecParams, 0, sizeof(CODECHAL_SURFACE_CODEC_PARAMS));
         surfaceCodecParams.dwSize               = size;
@@ -5249,8 +5266,8 @@ MOS_STATUS CodechalEncodeAvcEncG12::SetupROISurface()
         return eStatus;
     }
 
-    uint32_t bufferWidthInByte = MOS_ALIGN_CEIL((m_downscaledWidthInMb4x << 4), 64);//(m_picWidthInMb * 4 + 63) & ~63;
-    uint32_t bufferHeightInByte = MOS_ALIGN_CEIL((m_downscaledHeightInMb4x << 2), 8);//(m_picHeightInMb + 7) & ~7;
+    uint32_t bufferWidthInByte  = BrcBuffers.sBrcRoiSurface.dwPitch;
+    uint32_t bufferHeightInByte = MOS_ALIGN_CEIL((m_downscaledHeightInMb4x << 2), 8);
     uint32_t numMBs = m_picWidthInMb * m_picHeightInMb;
     for (uint32_t uMB = 0; uMB <= numMBs; uMB++)
     {
@@ -5401,8 +5418,6 @@ MOS_STATUS CodechalEncodeAvcEncG12::KernelDebugDumps()
 
             memset((void *)&meOutputParams, 0, sizeof(meOutputParams));
             meOutputParams.psMeMvBuffer = m_hmeKernel->GetSurface(CodechalKernelHme::SurfaceId::me4xMvDataBuffer);
-            meOutputParams.psMeBrcDistortionBuffer =
-                bBrcDistortionBufferSupported ? &BrcBuffers.sMeBrcDistortionBuffer : nullptr;
             meOutputParams.psMeDistortionBuffer =
                 m_4xMeDistortionBufferSupported ?
                 m_hmeKernel->GetSurface(CodechalKernelHme::SurfaceId::me4xDistortionBuffer) : nullptr;
@@ -5416,17 +5431,6 @@ MOS_STATUS CodechalEncodeAvcEncG12::KernelDebugDumps()
                 CodecHal_PictureIsBottomField(m_currOriginalPic) ? MOS_ALIGN_CEIL((m_downscaledWidthInMb4x * 32), 64) * (m_downscaledFrameFieldHeightInMb4x * 4) : 0,
                 CODECHAL_MEDIA_STATE_4X_ME));
 
-            if (meOutputParams.psMeBrcDistortionBuffer)
-            {
-                CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
-                    &meOutputParams.psMeBrcDistortionBuffer->OsResource,
-                    CodechalDbgAttr::attrOutput,
-                    "BrcDist",
-                    meOutputParams.psMeBrcDistortionBuffer->dwHeight *meOutputParams.psMeBrcDistortionBuffer->dwPitch,
-                    CodecHal_PictureIsBottomField(m_currOriginalPic) ? MOS_ALIGN_CEIL((m_downscaledWidthInMb4x * 8), 64) * MOS_ALIGN_CEIL((m_downscaledFrameFieldHeightInMb4x * 4), 8) : 0,
-                    CODECHAL_MEDIA_STATE_4X_ME));
-            }
-
             if (meOutputParams.psMeDistortionBuffer)
             {
                 CODECHAL_ENCODE_CHK_STATUS_RETURN(m_debugInterface->DumpBuffer(
@@ -5434,7 +5438,7 @@ MOS_STATUS CodechalEncodeAvcEncG12::KernelDebugDumps()
                     CodechalDbgAttr::attrOutput,
                     "MeDist",
                     meOutputParams.psMeDistortionBuffer->dwHeight *meOutputParams.psMeDistortionBuffer->dwPitch,
-                    CodecHal_PictureIsBottomField(m_currOriginalPic) ? MOS_ALIGN_CEIL((m_downscaledWidthInMb4x * 8), 64) * MOS_ALIGN_CEIL((m_downscaledFrameFieldHeightInMb4x * 4 * 10), 8) : 0,
+                    m_hmeKernel ? m_hmeKernel->GetDistortionBottomFieldOffset() : (uint32_t)m_meDistortionBottomFieldOffset,
                     CODECHAL_MEDIA_STATE_4X_ME));
             }
 
@@ -5513,8 +5517,8 @@ MOS_STATUS CodechalEncodeAvcEncG12::KernelDebugDumps()
                 &m_resMbStatsBuffer,
                 CodechalDbgAttr::attrOutput,
                 "MBStatsSurf",
-                m_picWidthInMb * (((CodecHal_PictureIsField(m_currOriginalPic)) ? 2 : 4) * m_downscaledFrameFieldHeightInMb4x) * 16 * sizeof(uint32_t),
-                CodecHal_PictureIsBottomField(m_currOriginalPic) ? (m_picWidthInMb * 16 * sizeof(uint32_t) * (2 * m_downscaledFrameFieldHeightInMb4x)) : 0,
+                m_picWidthInMb * m_frameFieldHeightInMb * 16 * sizeof(uint32_t),
+                CodecHal_PictureIsBottomField(m_currOriginalPic) ? m_mbStatsBottomFieldOffset : 0,
                 CODECHAL_MEDIA_STATE_4X_SCALING));
         }
 
